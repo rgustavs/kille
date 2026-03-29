@@ -354,6 +354,8 @@ function toggleNeken(playerId) {
   if (roundState.nekenIds.has(playerId)) {
     roundState.nekenIds.delete(playerId);
   } else {
+    // Only one player can have neken per round
+    roundState.nekenIds.clear();
     roundState.nekenIds.add(playerId);
     delete roundState.loserCards[playerId];
   }
@@ -361,29 +363,18 @@ function toggleNeken(playerId) {
   updateRoundPreview();
 }
 
-// Returns the auto-assigned worst-remaining card for each neken loser
+// Returns the auto-assigned worst-remaining card for each neken loser.
+// Neken players always get the worst card in the deck (cards are not exclusive).
 function getNekenCards() {
   const losers = getActivePlayers().filter(id => id !== roundState.winnerId);
 
-  // Cards taken by non-neken losers this round
-  const takenCardIds = new Set();
-  losers.forEach(id => {
-    if (!roundState.nekenIds.has(id) && roundState.loserCards[id]) {
-      takenCardIds.add(roundState.loserCards[id]);
-    }
-  });
-
   // All cards sorted worst-first (highest points = worst for loser)
-  const available = [...CARDS]
-    .sort((a, b) => b.points - a.points)
-    .filter(c => !takenCardIds.has(c.id));
+  const sorted = [...CARDS].sort((a, b) => b.points - a.points);
 
   const nekenPlayers = losers.filter(id => roundState.nekenIds.has(id));
   const result = {};
-  nekenPlayers.forEach((id, idx) => {
-    if (idx < available.length) {
-      result[id] = available[idx];
-    }
+  nekenPlayers.forEach(id => {
+    result[id] = sorted[0]; // each neken player gets the globally worst card
   });
   return result;
 }
