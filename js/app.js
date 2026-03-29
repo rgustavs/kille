@@ -363,18 +363,28 @@ function toggleNeken(playerId) {
   updateRoundPreview();
 }
 
-// Returns the auto-assigned worst-remaining card for each neken loser.
-// Neken players always get the worst card in the deck (cards are not exclusive).
+// Returns the auto-assigned card for the neken loser:
+// double the worst card played by any non-neken loser this round.
 function getNekenCards() {
   const losers = getActivePlayers().filter(id => id !== roundState.winnerId);
-
-  // All cards sorted worst-first (highest points = worst for loser)
-  const sorted = [...CARDS].sort((a, b) => b.points - a.points);
-
   const nekenPlayers = losers.filter(id => roundState.nekenIds.has(id));
+
+  if (nekenPlayers.length === 0) return {};
+
+  // Find the worst card among non-neken losers who have already picked
+  let worstCard = null;
+  losers.forEach(id => {
+    if (!roundState.nekenIds.has(id) && roundState.loserCards[id]) {
+      const card = getCardById(roundState.loserCards[id]);
+      if (card && (!worstCard || card.points > worstCard.points)) {
+        worstCard = card;
+      }
+    }
+  });
+
   const result = {};
   nekenPlayers.forEach(id => {
-    result[id] = sorted[0]; // each neken player gets the globally worst card
+    result[id] = worstCard; // null until at least one non-neken loser has picked
   });
   return result;
 }
@@ -400,11 +410,14 @@ function renderLoserAssignments() {
     if (isNeken) {
       const nekenCard = nekenCards[p.id];
       const points = nekenCard ? nekenCard.points * 2 : 0;
+      const cardLabel = nekenCard
+        ? `${escHtml(nekenCard.name)} ×2`
+        : '<em>Väntar på sämsta kort…</em>';
       return `<div class="loser-row">
         <span class="loser-row__name">${escHtml(p.name)}</span>
         <button class="loser-row__neken-btn loser-row__neken-btn--active" data-neken-player="${p.id}">Neken ✕</button>
-        <span class="loser-row__neken-card">${nekenCard ? `${escHtml(nekenCard.name)} ×2` : '—'}</span>
-        <span class="loser-row__points">−${points}</span>
+        <span class="loser-row__neken-card">${cardLabel}</span>
+        ${nekenCard ? `<span class="loser-row__points">−${points}</span>` : ''}
       </div>`;
     }
 
