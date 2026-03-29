@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="description" content="Digital poängräknare för det klassiska svenska kortspelet Kille. Håll koll på protokollet med automatisk beräkning.">
+  <meta name="theme-color" content="#163d24">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Kille — Poängräknare</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ══════ Header ══════ -->
+  <header class="app-header" id="app-header">
+    <button class="app-header__back" id="btn-back" aria-label="Tillbaka">←</button>
+    <h1 class="app-header__title" id="header-title">Kille</h1>
+    <button class="app-header__action" id="btn-header-action" style="display:none"></button>
+  </header>
+
+  <!-- ══════ Screens ══════ -->
+  <main>
+
+    <!-- ── Home ── -->
+    <section class="screen active app-content" id="screen-home">
+      <div class="home-hero">
+        <span class="home-hero__icon">⚜</span>
+        <h2 class="home-hero__title">Kille</h2>
+        <p class="home-hero__subtitle">Poängräknare för det klassiska kortspelet</p>
+      </div>
+      <div class="home-actions">
+        <button class="btn btn--primary btn--full" id="btn-new-game">🃏 Nytt Spel</button>
+        <button class="btn btn--gold btn--full" id="btn-continue-game" style="display:none">▶ Fortsätt Spel</button>
+        <button class="btn btn--secondary btn--full" id="btn-history">📜 Historik</button>
+        <button class="btn btn--ghost btn--full" id="btn-players">👥 Hantera Spelare</button>
+      </div>
+    </section>
+
+    <!-- ── Player Management ── -->
+    <section class="screen app-content" id="screen-players">
+      <div class="panel mb-lg">
+        <h3 class="panel__title">Lägg till spelare</h3>
+        <div class="input-group">
+          <input type="text" class="input" id="input-player-name" placeholder="Spelarnamn..." maxlength="20" autocomplete="off">
+          <button class="btn btn--primary" id="btn-add-player">Lägg till</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h3 class="panel__title">Spelare</h3>
+        <ul class="player-list" id="player-list"></ul>
+        <div class="empty-state" id="players-empty" style="display:none">
+          <div class="empty-state__icon">👤</div>
+          <div class="empty-state__text">Inga spelare ännu. Lägg till minst 2 för att starta ett spel.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Game Setup ── -->
+    <section class="screen app-content" id="screen-setup">
+      <div class="panel mb-lg">
+        <h3 class="panel__title">Välj spelare (2–8)</h3>
+        <div class="setup-grid" id="setup-grid"></div>
+        <div class="setup-count" id="setup-count">0 spelare valda</div>
+      </div>
+      <button class="btn btn--primary btn--full" id="btn-start-game" disabled>Starta Spel</button>
+    </section>
+
+    <!-- ── Active Game ── -->
+    <section class="screen" id="screen-game">
+      <div class="app-content" style="padding-bottom: 100px;">
+        <div class="protocol-wrapper" id="protocol-wrapper">
+          <table class="protocol-table" id="protocol-table">
+            <thead id="protocol-head"></thead>
+            <tbody id="protocol-body"></tbody>
+            <tfoot id="protocol-foot"></tfoot>
+          </table>
+        </div>
+        <div class="empty-state" id="game-empty">
+          <div class="empty-state__icon">🃏</div>
+          <div class="empty-state__text">Inga omgångar spelade ännu.<br>Tryck på knappen nedan för att registrera en omgång.</div>
+        </div>
+      </div>
+      <div class="game-actions">
+        <button class="btn btn--primary" id="btn-new-round">⚜ Ny Omgång</button>
+        <button class="btn btn--ghost btn--small" id="btn-undo-round" style="display:none">↩ Ångra</button>
+        <button class="btn btn--secondary btn--small" id="btn-end-game">Avsluta</button>
+      </div>
+    </section>
+
+    <!-- ── History ── -->
+    <section class="screen app-content" id="screen-history">
+      <div class="history-list" id="history-list"></div>
+      <div class="empty-state" id="history-empty" style="display:none">
+        <div class="empty-state__icon">📜</div>
+        <div class="empty-state__text">Inga avslutade spel ännu.</div>
+      </div>
+    </section>
+
+    <!-- ── View Game (history detail) ── -->
+    <section class="screen" id="screen-view-game">
+      <div class="app-content">
+        <div class="protocol-wrapper" id="view-protocol-wrapper">
+          <table class="protocol-table" id="view-protocol-table">
+            <thead id="view-protocol-head"></thead>
+            <tbody id="view-protocol-body"></tbody>
+            <tfoot id="view-protocol-foot"></tfoot>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ══════ Round Entry Modal ══════ -->
+  <div class="modal-overlay" id="modal-round">
+    <div class="modal">
+      <div class="modal__handle"></div>
+      <h2 class="modal__title" id="round-modal-title">Ny Omgång</h2>
+
+      <!-- Step 1: Stand-by -->
+      <div class="modal__section">
+        <div class="modal__section-title">Vilar denna omgång?</div>
+        <div class="standby-grid" id="standby-grid"></div>
+      </div>
+
+      <!-- Step 2: Winner -->
+      <div class="modal__section">
+        <div class="modal__section-title">Vinnare</div>
+        <div class="winner-grid" id="winner-grid"></div>
+      </div>
+
+      <!-- Step 3: Loser cards -->
+      <div class="modal__section" id="loser-section" style="display:none">
+        <div class="modal__section-title">Förlorarnas kort</div>
+        <div class="loser-assignments" id="loser-assignments"></div>
+      </div>
+
+      <!-- Preview -->
+      <div class="round-preview" id="round-preview" style="display:none">
+        <div class="round-preview__label">Vinnarens poäng</div>
+        <div class="round-preview__winner" id="round-preview-score">+0</div>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex-row mt-lg" style="justify-content: center; gap: 0.5rem;">
+        <button class="btn btn--ghost" id="btn-cancel-round">Avbryt</button>
+        <button class="btn btn--primary" id="btn-confirm-round" disabled>Bekräfta Omgång</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════ Card Picker Overlay ══════ -->
+  <div class="card-picker-overlay" id="card-picker-overlay">
+    <div class="card-picker">
+      <div class="modal__handle"></div>
+      <h3 class="card-picker__title" id="card-picker-title">Välj kort</h3>
+
+      <!-- Picture cards -->
+      <div class="card-picker__group">
+        <div class="card-picker__group-label">Bildkort</div>
+        <div class="card-picker__grid" id="picker-picture-cards"></div>
+      </div>
+
+      <!-- Number cards -->
+      <div class="card-picker__group">
+        <div class="card-picker__group-label">Sifferkort (Liljor)</div>
+        <div class="card-picker__grid" id="picker-number-cards"></div>
+      </div>
+
+      <!-- Zero cards -->
+      <div class="card-picker__group">
+        <div class="card-picker__group-label">Nollkort</div>
+        <div class="card-picker__grid" id="picker-zero-cards"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════ Confirm Dialog ══════ -->
+  <div class="confirm-dialog" id="confirm-dialog">
+    <div class="confirm-dialog__box">
+      <div class="confirm-dialog__text" id="confirm-text"></div>
+      <div class="confirm-dialog__actions">
+        <button class="btn btn--ghost" id="confirm-no">Avbryt</button>
+        <button class="btn btn--danger" id="confirm-yes">Bekräfta</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW setup failed: ', err));
+      });
+    }
+  </script>
+</body>
+</html>
