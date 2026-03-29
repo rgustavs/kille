@@ -24,7 +24,8 @@ let activeGame = null;
 let roundState = {
   standByIds: new Set(),
   winnerId: null,
-  loserCards: {} // { playerId: cardId }
+  loserCards: {}, // { playerId: cardId }
+  nekenIds: new Set()
 };
 
 // Card picker
@@ -249,7 +250,7 @@ function renderGame() {
       return `<td><div class="protocol-cell">
         <span class="protocol-cell__round protocol-cell__round--loser">${s.roundScore}</span>
         <span class="protocol-cell__total">${formatScore(s.runningTotal)}</span>
-        ${card ? `<span class="protocol-cell__card">${escHtml(card.name)}</span>` : ''}
+        ${card ? `<span class="protocol-cell__card">${escHtml(card.name)}${s.neken ? ' ×2' : ''}</span>` : ''}
       </div></td>`;
     }).join('');
     return `<tr><td>${round.roundNumber}</td>${cells}</tr>`;
@@ -276,7 +277,8 @@ function openRoundModal() {
   roundState = {
     standByIds: new Set(),
     winnerId: null,
-    loserCards: {}
+    loserCards: {},
+    nekenIds: new Set()
   };
 
   const roundNum = activeGame.rounds.length + 1;
@@ -312,8 +314,9 @@ function toggleStandby(playerId) {
     if (roundState.winnerId === playerId) {
       roundState.winnerId = null;
     }
-    // Remove from loser cards
+    // Remove from loser cards and neken
     delete roundState.loserCards[playerId];
+    roundState.nekenIds.delete(playerId);
   }
   renderStandbyGrid();
   renderWinnerGrid();
@@ -339,11 +342,50 @@ function renderWinnerGrid() {
 
 function selectWinner(playerId) {
   roundState.winnerId = playerId;
-  // Remove winner from loser cards
+  // Remove winner from loser cards and neken
   delete roundState.loserCards[playerId];
+  roundState.nekenIds.delete(playerId);
   renderWinnerGrid();
   renderLoserAssignments();
   updateRoundPreview();
+}
+
+function toggleNeken(playerId) {
+  if (roundState.nekenIds.has(playerId)) {
+    roundState.nekenIds.delete(playerId);
+  } else {
+    roundState.nekenIds.add(playerId);
+    delete roundState.loserCards[playerId];
+  }
+  renderLoserAssignments();
+  updateRoundPreview();
+}
+
+// Returns the auto-assigned worst-remaining card for each neken loser
+function getNekenCards() {
+  const losers = getActivePlayers().filter(id => id !== roundState.winnerId);
+
+  // Cards taken by non-neken losers this round
+  const takenCardIds = new Set();
+  losers.forEach(id => {
+    if (!roundState.nekenIds.has(id) && roundState.loserCards[id]) {
+      takenCardIds.add(roundState.loserCards[id]);
+    }
+  });
+
+  // All cards sorted worst-first (highest points = worst for loser)
+  const available = [...CARDS]
+    .sort((a, b) => b.points - a.points)
+    .filter(c => !takenCardIds.has(c.id));
+
+  const nekenPlayers = losers.filter(id => roundState.nekenIds.has(id));
+  const result = {};
+  nekenPlayers.forEach((id, idx) => {
+    if (idx < available.length) {
+      result[id] = available[idx];
+    }
+  });
+  return result;
 }
 
 function renderLoserAssignments() {
@@ -359,13 +401,29 @@ function renderLoserAssignments() {
   const losers = getActivePlayers().filter(id => id !== roundState.winnerId);
   const players = losers.map(id => PlayerStore.get(id) || { id, name: '?' });
 
+  const nekenCards = getNekenCards();
+
   container.innerHTML = players.map(p => {
+    const isNeken = roundState.nekenIds.has(p.id);
+
+    if (isNeken) {
+      const nekenCard = nekenCards[p.id];
+      const points = nekenCard ? nekenCard.points * 2 : 0;
+      return `<div class="loser-row">
+        <span class="loser-row__name">${escHtml(p.name)}</span>
+        <button class="loser-row__neken-btn loser-row__neken-btn--active" data-neken-player="${p.id}">Neken ✕</button>
+        <span class="loser-row__neken-card">${nekenCard ? `${escHtml(nekenCard.name)} ×2` : '—'}</span>
+        <span class="loser-row__points">−${points}</span>
+      </div>`;
+    }
+
     const cardId = roundState.loserCards[p.id];
     const card = cardId ? getCardById(cardId) : null;
     const points = card ? card.points : 0;
 
     return `<div class="loser-row">
       <span class="loser-row__name">${escHtml(p.name)}</span>
+      <button class="loser-row__neken-btn" data-neken-player="${p.id}">Neken</button>
       <button class="loser-row__card-btn ${card ? 'has-card' : ''}" data-player="${p.id}">
         ${card ? `${escHtml(card.name)} (${card.points}p)` : 'Välj kort...'}
       </button>
@@ -386,14 +444,23 @@ function updateRoundPreview() {
   }
 
   const losers = getActivePlayers().filter(id => id !== roundState.winnerId);
-  const allAssigned = losers.length > 0 && losers.every(id => roundState.loserCards[id]);
+  const nekenCards = getNekenCards();
+  const allAssigned = losers.length > 0 && losers.every(id => {
+    if (roundState.nekenIds.has(id)) return !!nekenCards[id];
+    return !!roundState.loserCards[id];
+  });
 
   let totalPoints = 0;
   losers.forEach(id => {
-    const cardId = roundState.loserCards[id];
-    if (cardId) {
-      const card = getCardById(cardId);
-      totalPoints += card ? card.points : 0;
+    if (roundState.nekenIds.has(id)) {
+      const card = nekenCards[id];
+      totalPoints += card ? card.points * 2 : 0;
+    } else {
+      const cardId = roundState.loserCards[id];
+      if (cardId) {
+        const card = getCardById(cardId);
+        totalPoints += card ? card.points : 0;
+      }
     }
   });
 
@@ -405,12 +472,18 @@ function updateRoundPreview() {
 function confirmRound() {
   if (!roundState.winnerId) return;
   const losers = getActivePlayers().filter(id => id !== roundState.winnerId);
-  if (!losers.every(id => roundState.loserCards[id])) return;
+  const nekenCards = getNekenCards();
+  if (!losers.every(id => roundState.nekenIds.has(id) ? !!nekenCards[id] : !!roundState.loserCards[id])) return;
 
   const roundData = {
     winnerId: roundState.winnerId,
     standByIds: [...roundState.standByIds],
-    losers: losers.map(id => ({ playerId: id, cardId: roundState.loserCards[id] }))
+    losers: losers.map(id => {
+      if (roundState.nekenIds.has(id)) {
+        return { playerId: id, cardId: nekenCards[id].id, neken: true };
+      }
+      return { playerId: id, cardId: roundState.loserCards[id] };
+    })
   };
 
   activeGame = addRound(activeGame, roundData);
@@ -562,7 +635,7 @@ function viewGame(gameId) {
       return `<td><div class="protocol-cell">
         <span class="protocol-cell__round protocol-cell__round--loser">${s.roundScore}</span>
         <span class="protocol-cell__total">${formatScore(s.runningTotal)}</span>
-        ${card ? `<span class="protocol-cell__card">${escHtml(card.name)}</span>` : ''}
+        ${card ? `<span class="protocol-cell__card">${escHtml(card.name)}${s.neken ? ' ×2' : ''}</span>` : ''}
       </div></td>`;
     }).join('');
     return `<tr><td>${round.roundNumber}</td>${cells}</tr>`;
@@ -667,8 +740,10 @@ function bindEvents() {
 
   // Loser card assignment
   $('#loser-assignments').addEventListener('click', (e) => {
-    const btn = e.target.closest('.loser-row__card-btn');
-    if (btn) openCardPicker(btn.dataset.player);
+    const nekenBtn = e.target.closest('.loser-row__neken-btn');
+    if (nekenBtn) { toggleNeken(nekenBtn.dataset.nekenPlayer); return; }
+    const cardBtn = e.target.closest('.loser-row__card-btn');
+    if (cardBtn) openCardPicker(cardBtn.dataset.player);
   });
 
   // Card picker
