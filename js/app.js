@@ -350,6 +350,34 @@ function selectWinner(playerId) {
   updateRoundPreview();
 }
 
+function playMockLaugh() {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) return;
+  const ctx = new AudioCtx();
+
+  const bursts = [0, 0.19, 0.38, 0.57]; // four "ha"s
+  bursts.forEach((offset, i) => {
+    const t = ctx.currentTime + offset;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sawtooth';
+    // Descending pitch per burst for a derisive feel
+    const baseFreq = 340 - i * 18;
+    osc.frequency.setValueAtTime(baseFreq, t);
+    osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.72, t + 0.14);
+
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.22, t + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.17);
+  });
+}
+
 function toggleNeken(playerId) {
   if (roundState.nekenIds.has(playerId)) {
     roundState.nekenIds.delete(playerId);
@@ -358,6 +386,7 @@ function toggleNeken(playerId) {
     roundState.nekenIds.clear();
     roundState.nekenIds.add(playerId);
     delete roundState.loserCards[playerId];
+    playMockLaugh();
   }
   renderLoserAssignments();
   updateRoundPreview();
