@@ -143,13 +143,14 @@ export function createGame(playerIds) {
 export function addRound(game, roundData) {
   const { winnerId, standByIds = [], losers = [] } = roundData;
 
-  // Calculate winner score = sum of all loser card points
+  // Calculate winner score = sum of all loser card points (neken = doubled)
   let winnerScore = 0;
   const loserEntries = losers.map(l => {
     const card = getCardById(l.cardId);
     const points = card ? card.points : 0;
-    winnerScore += points;
-    return { playerId: l.playerId, cardId: l.cardId, score: -points };
+    const actualPoints = l.neken ? points * 2 : points;
+    winnerScore += actualPoints;
+    return { playerId: l.playerId, cardId: l.cardId, score: -actualPoints, neken: l.neken || false };
   });
 
   const round = {
@@ -218,6 +219,7 @@ export function calculateScoreTable(game) {
     round.losers.forEach(l => {
       scores[l.playerId].roundScore = l.score;
       scores[l.playerId].cardId = l.cardId;
+      scores[l.playerId].neken = l.neken || false;
     });
 
     // Update running totals

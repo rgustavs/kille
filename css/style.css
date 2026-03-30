@@ -823,6 +823,41 @@ body {
   text-align: right;
 }
 
+.loser-row__neken-btn {
+  padding: var(--space-xs) var(--space-sm);
+  border: 2px solid var(--cream-400);
+  border-radius: var(--radius-xl);
+  background: var(--cream-50);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  min-height: 36px;
+}
+.loser-row__neken-btn:hover {
+  border-color: var(--red-600);
+  color: var(--red-600);
+}
+.loser-row__neken-btn--active {
+  background: var(--red-600);
+  border-color: var(--red-600);
+  color: #fff;
+}
+.loser-row__neken-btn--active:hover {
+  background: color-mix(in srgb, var(--red-600) 80%, #000);
+  color: #fff;
+}
+
+.loser-row__neken-card {
+  flex: 1;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--red-600);
+  font-style: italic;
+}
+
 /* Round summary (preview) */
 .round-preview {
   background: var(--green-100);
