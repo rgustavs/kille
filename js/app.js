@@ -3,8 +3,8 @@
  * Handles all screen navigation, rendering, and user interactions.
  */
 import { CARDS, getCardById, getCardsByType } from './cards.js';
+import { PlayerStore, GameStore } from './store.js';
 import {
-  PlayerStore, GameStore,
   createGame, addRound, removeLastRound, completeGame, calculateScoreTable
 } from './game.js';
 
@@ -193,6 +193,8 @@ function updateSetupCount() {
 function startGame() {
   if (selectedPlayerIds.size < 2) return;
   activeGame = createGame([...selectedPlayerIds]);
+  GameStore.save(activeGame);
+  GameStore.setActive(activeGame.id);
   selectedPlayerIds.clear();
   navigateTo('game', { replace: true });
   // Clear stack so back goes to home
@@ -520,6 +522,7 @@ function confirmRound() {
   };
 
   activeGame = addRound(activeGame, roundData);
+  GameStore.save(activeGame);
   closeRoundModal();
   renderGame();
 }
@@ -578,6 +581,7 @@ function undoLastRound() {
   if (!activeGame || activeGame.rounds.length === 0) return;
   showConfirm('Ångra senaste omgången?', () => {
     activeGame = removeLastRound(activeGame);
+    GameStore.save(activeGame);
     renderGame();
   });
 }
@@ -586,6 +590,8 @@ function endGame() {
   if (!activeGame) return;
   showConfirm('Avsluta spelet?', () => {
     activeGame = completeGame(activeGame);
+    GameStore.save(activeGame);
+    GameStore.clearActive();
     activeGame = null;
     navigateTo('home', { replace: true });
     screenStack.length = 0;

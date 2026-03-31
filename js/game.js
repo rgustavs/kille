@@ -1,144 +1,40 @@
 /**
  * Kille Game Engine
- * Handles player persistence, game state, scoring, and storage.
+ * Pure functional domain logic for game rules, state progression, and scoring.
+ * Does not handle persistence or side effects.
  */
 import { getCardById } from './cards.js';
 
-// ─── Utility ────────────────────────────────────────────────────────────────
-function uid() {
+/**
+ * Utility function to generate a unique ID.
+ */
+export function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
-
-// ─── Player Store (persistent across games) ─────────────────────────────────
-const PLAYERS_KEY = 'kille_players';
-
-export const PlayerStore = {
-  _cache: null,
-
-  getAll() {
-    if (!this._cache) {
-      this._cache = JSON.parse(localStorage.getItem(PLAYERS_KEY) || '[]');
-    }
-    return this._cache;
-  },
-
-  _save() {
-    localStorage.setItem(PLAYERS_KEY, JSON.stringify(this._cache));
-  },
-
-  get(id) {
-    return this.getAll().find(p => p.id === id) || null;
-  },
-
-  add(name) {
-    const players = this.getAll();
-    const player = { id: uid(), name: name.trim(), createdAt: new Date().toISOString() };
-    players.push(player);
-    this._save();
-    return player;
-  },
-
-  remove(id) {
-    this._cache = this.getAll().filter(p => p.id !== id);
-    this._save();
-  },
-
-  rename(id, newName) {
-    const player = this.get(id);
-    if (player) {
-      player.name = newName.trim();
-      this._save();
-    }
-  }
-};
-
-// ─── Game Store (save/load games) ────────────────────────────────────────────
-const GAMES_KEY = 'kille_games';
-const ACTIVE_KEY = 'kille_active_game_id';
-
-export const GameStore = {
-  _cache: null,
-
-  getAll() {
-    if (!this._cache) {
-      this._cache = JSON.parse(localStorage.getItem(GAMES_KEY) || '[]');
-    }
-    return this._cache;
-  },
-
-  _save() {
-    localStorage.setItem(GAMES_KEY, JSON.stringify(this._cache));
-  },
-
-  get(id) {
-    return this.getAll().find(g => g.id === id) || null;
-  },
-
-  save(game) {
-    const games = this.getAll();
-    const idx = games.findIndex(g => g.id === game.id);
-    if (idx >= 0) {
-      games[idx] = game;
-    } else {
-      games.push(game);
-    }
-    this._save();
-  },
-
-  remove(id) {
-    this._cache = this.getAll().filter(g => g.id !== id);
-    this._save();
-    if (this.getActiveId() === id) {
-      this.clearActive();
-    }
-  },
-
-  getActiveId() {
-    return localStorage.getItem(ACTIVE_KEY) || null;
-  },
-
-  setActive(id) {
-    localStorage.setItem(ACTIVE_KEY, id);
-  },
-
-  clearActive() {
-    localStorage.removeItem(ACTIVE_KEY);
-  },
-
-  getActive() {
-    const id = this.getActiveId();
-    return id ? this.get(id) : null;
-  }
-};
-
-// ─── Game Engine ─────────────────────────────────────────────────────────────
 
 /**
  * Create a new game with selected player IDs.
  * @param {string[]} playerIds - Array of player IDs (2-8)
- * @returns {object} game object
+ * @returns {object} The initial game object state
  */
 export function createGame(playerIds) {
   if (playerIds.length < 2 || playerIds.length > 8) {
     throw new Error('Kille kräver 2-8 spelare');
   }
-  const game = {
+  return {
     id: uid(),
     playerIds: [...playerIds],
     rounds: [],
     createdAt: new Date().toISOString(),
     status: 'active' // 'active' | 'completed'
   };
-  GameStore.save(game);
-  GameStore.setActive(game.id);
-  return game;
 }
 
 /**
- * Add a round to a game.
- * @param {object} game
- * @param {object} roundData - { winnerId, standByIds, losers: [{playerId, cardId}] }
- * @returns {object} the updated game
+ * Add a round to a game. Returns a new game object (immutable update).
+ * @param {object} game - The current game state
+ * @param {object} roundData - { winnerId, standByIds, losers: [{playerId, cardId, neken}] }
+ * @returns {object} The updated game state
  */
 export function addRound(game, roundData) {
   const { winnerId, standByIds = [], losers = [] } = roundData;
@@ -162,36 +58,45 @@ export function addRound(game, roundData) {
     timestamp: new Date().toISOString()
   };
 
-  game.rounds.push(round);
-  GameStore.save(game);
-  return game;
+  return {
+    ...game,
+    rounds: [...game.rounds, round]
+  };
 }
 
 /**
- * Remove the last round (undo).
+ * Remove the last round (undo). Returns a new game object.
+ * @param {object} game - The current game state
+ * @returns {object} The updated game state
  */
 export function removeLastRound(game) {
-  if (game.rounds.length > 0) {
-    game.rounds.pop();
-    GameStore.save(game);
+  if (game.rounds.length === 0) {
+    return game;
   }
-  return game;
+  return {
+    ...game,
+    rounds: game.rounds.slice(0, -1)
+  };
 }
 
 /**
- * Complete a game.
+ * Complete a game. Returns a new game object.
+ * @param {object} game - The current game state
+ * @returns {object} The updated game state
  */
 export function completeGame(game) {
-  game.status = 'completed';
-  game.completedAt = new Date().toISOString();
-  GameStore.save(game);
-  GameStore.clearActive();
-  return game;
+  return {
+    ...game,
+    status: 'completed',
+    completedAt: new Date().toISOString()
+  };
 }
 
 /**
  * Calculate the score table for a game.
  * Returns an object: { rounds: [{ roundNumber, scores: { [playerId]: { roundScore, runningTotal, cardId?, isWinner, isStandBy } } }] }
+ * @param {object} game - The current game state
+ * @returns {object} The calculated score table and running totals
  */
 export function calculateScoreTable(game) {
   const runningTotals = {};
@@ -240,12 +145,15 @@ export function calculateScoreTable(game) {
 
 /**
  * Get lifetime stats for all players.
+ * Refactored to accept data as parameters rather than reading from a global store.
+ * @param {object[]} games - Array of all game objects
+ * @param {object[]} players - Array of all player objects
+ * @returns {object} Player statistics dictionary keyed by player ID
  */
-export function getPlayerStats() {
-  const games = GameStore.getAll();
+export function getPlayerStats(games, players) {
   const stats = {};
 
-  PlayerStore.getAll().forEach(p => {
+  players.forEach(p => {
     stats[p.id] = { gamesPlayed: 0, roundsPlayed: 0, totalScore: 0, roundsWon: 0, gamesWon: 0 };
   });
 
