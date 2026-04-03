@@ -294,8 +294,14 @@ function openRoundModal() {
   $('#modal-round').classList.add('active');
 }
 
-function closeRoundModal() {
-  $('#modal-round').classList.remove('active');
+function closeRoundModal(skipAnimation = false) {
+  const overlay = $('#modal-round');
+  if (skipAnimation) {
+    overlay.classList.remove('active');
+    return;
+  }
+  overlay.classList.add('closing');
+  setTimeout(() => overlay.classList.remove('active', 'closing'), 250);
 }
 
 function renderStandbyGrid() {
@@ -561,9 +567,15 @@ function openCardPicker(playerId) {
   $('#card-picker-overlay').classList.add('active');
 }
 
-function closeCardPicker() {
-  $('#card-picker-overlay').classList.remove('active');
+function closeCardPicker(skipAnimation = false) {
   cardPickerTarget = null;
+  const overlay = $('#card-picker-overlay');
+  if (skipAnimation) {
+    overlay.classList.remove('active');
+    return;
+  }
+  overlay.classList.add('closing');
+  setTimeout(() => overlay.classList.remove('active', 'closing'), 250);
 }
 
 function selectCard(cardId) {
@@ -724,6 +736,45 @@ function formatScore(score) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// SWIPE TO DISMISS
+// ═══════════════════════════════════════════════════════════════════════════
+function addSwipeToDismiss(sheetEl, closeFn) {
+  let startY = 0;
+  let startScrollTop = 0;
+
+  sheetEl.addEventListener('touchstart', (e) => {
+    startY = e.touches[0].clientY;
+    startScrollTop = sheetEl.scrollTop;
+    sheetEl.style.transition = 'none';
+  }, { passive: true });
+
+  sheetEl.addEventListener('touchmove', (e) => {
+    if (startScrollTop > 0) return;
+    const dy = e.touches[0].clientY - startY;
+    if (dy > 0) sheetEl.style.transform = `translateY(${dy}px)`;
+  }, { passive: true });
+
+  sheetEl.addEventListener('touchend', (e) => {
+    const dy = e.changedTouches[0].clientY - startY;
+    if (startScrollTop === 0 && dy > 80) {
+      sheetEl.style.transition = 'transform 200ms ease';
+      sheetEl.style.transform = 'translateY(100%)';
+      setTimeout(() => {
+        sheetEl.style.transition = '';
+        sheetEl.style.transform = '';
+        closeFn(true);
+      }, 200);
+    } else {
+      sheetEl.style.transition = 'transform 300ms cubic-bezier(0.32, 0.72, 0, 1)';
+      sheetEl.style.transform = '';
+      sheetEl.addEventListener('transitionend', () => {
+        sheetEl.style.transition = '';
+      }, { once: true });
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // EVENT BINDING
 // ═══════════════════════════════════════════════════════════════════════════
 function bindEvents() {
@@ -816,6 +867,10 @@ function bindEvents() {
     const item = e.target.closest('.history-item');
     if (item) viewGame(item.dataset.game);
   });
+
+  // Swipe to dismiss bottom sheets
+  addSwipeToDismiss($('.modal'), closeRoundModal);
+  addSwipeToDismiss($('.card-picker'), closeCardPicker);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

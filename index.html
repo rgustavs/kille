@@ -15,7 +15,11 @@
 
   <!-- ══════ Header ══════ -->
   <header class="app-header" id="app-header">
-    <button class="app-header__back" id="btn-back" aria-label="Tillbaka">←</button>
+    <button class="app-header__back" id="btn-back" aria-label="Tillbaka">
+      <svg width="10" height="18" viewBox="0 0 10 18" fill="none" aria-hidden="true">
+        <path d="M9 1L1 9L9 17" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
     <h1 class="app-header__title" id="header-title">Kille</h1>
     <button class="app-header__action" id="btn-header-action" style="display:none"></button>
   </header>
@@ -69,7 +73,7 @@
 
     <!-- ── Active Game ── -->
     <section class="screen" id="screen-game">
-      <div class="app-content" style="padding-bottom: 100px;">
+      <div class="app-content" style="padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px));">
         <div class="protocol-wrapper" id="protocol-wrapper">
           <table class="protocol-table" id="protocol-table">
             <thead id="protocol-head"></thead>
