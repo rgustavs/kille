@@ -387,7 +387,6 @@ function toggleNeken(playerId) {
     // Only one player can have neken per round
     roundState.nekenIds.clear();
     roundState.nekenIds.add(playerId);
-    delete roundState.loserCards[playerId];
     playMockLaugh();
   }
   renderLoserAssignments();
@@ -402,10 +401,10 @@ function getNekenCards() {
 
   if (nekenPlayers.length === 0) return {};
 
-  // Find the worst card among non-neken losers who have already picked
+  // Find the worst card among all losers (including the neken player)
   let worstCard = null;
   losers.forEach(id => {
-    if (!roundState.nekenIds.has(id) && roundState.loserCards[id]) {
+    if (roundState.loserCards[id]) {
       const card = getCardById(roundState.loserCards[id]);
       if (card && (!worstCard || card.points > worstCard.points)) {
         worstCard = card;
@@ -441,12 +440,17 @@ function renderLoserAssignments() {
     if (isNeken) {
       const nekenCard = nekenCards[p.id];
       const points = nekenCard ? nekenCard.points * 2 : 0;
+      const ownCardId = roundState.loserCards[p.id];
+      const ownCard = ownCardId ? getCardById(ownCardId) : null;
       const cardLabel = nekenCard
         ? `${escHtml(nekenCard.name)} ×2`
         : '<em>Väntar på sämsta kort…</em>';
       return `<div class="loser-row">
         <span class="loser-row__name">${escHtml(p.name)}</span>
         <button class="loser-row__neken-btn loser-row__neken-btn--active" data-neken-player="${p.id}">Neken ✕</button>
+        <button class="loser-row__card-btn ${ownCard ? 'has-card' : ''}" data-player="${p.id}">
+          ${ownCard ? `${escHtml(ownCard.name)} (${ownCard.points}p)` : 'Välj kort...'}
+        </button>
         <span class="loser-row__neken-card">${cardLabel}</span>
         ${nekenCard ? `<span class="loser-row__points">−${points}</span>` : ''}
       </div>`;
@@ -480,10 +484,7 @@ function updateRoundPreview() {
 
   const losers = getActivePlayers().filter(id => id !== roundState.winnerId);
   const nekenCards = getNekenCards();
-  const allAssigned = losers.length > 0 && losers.every(id => {
-    if (roundState.nekenIds.has(id)) return !!nekenCards[id];
-    return !!roundState.loserCards[id];
-  });
+  const allAssigned = losers.length > 0 && losers.every(id => !!roundState.loserCards[id]);
 
   let totalPoints = 0;
   losers.forEach(id => {
@@ -508,7 +509,7 @@ function confirmRound() {
   if (!roundState.winnerId) return;
   const losers = getActivePlayers().filter(id => id !== roundState.winnerId);
   const nekenCards = getNekenCards();
-  if (!losers.every(id => roundState.nekenIds.has(id) ? !!nekenCards[id] : !!roundState.loserCards[id])) return;
+  if (!losers.every(id => !!roundState.loserCards[id])) return;
 
   const roundData = {
     winnerId: roundState.winnerId,
