@@ -566,6 +566,15 @@ body {
   pointer-events: none;
 }
 
+.protocol-cell__round--winner-neken::after {
+  content: '☀️';
+  border: none;
+  inset: auto;
+  position: static;
+  margin-left: 3px;
+  font-size: 0.85em;
+}
+
 .protocol-cell__round--loser {
   color: var(--red-600);
 }
