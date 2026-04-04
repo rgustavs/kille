@@ -50,6 +50,7 @@ function navigateTo(screenId, options = {}) {
   $(`#screen-${screenId}`).classList.add('active');
   updateHeader(screenId);
   renderScreen(screenId);
+  window.scrollTo(0, 0);
 }
 
 function goBack() {
@@ -59,6 +60,7 @@ function goBack() {
   $(`#screen-${prev}`).classList.add('active');
   updateHeader(prev);
   renderScreen(prev);
+  window.scrollTo(0, 0);
 }
 
 function updateHeader(screenId) {
