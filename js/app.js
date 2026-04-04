@@ -243,8 +243,9 @@ function renderGame() {
         </div></td>`;
       }
       if (s.isWinner) {
+        const winnerClass = s.hadNeken ? 'protocol-cell__round--winner protocol-cell__round--winner-neken' : 'protocol-cell__round--winner';
         return `<td><div class="protocol-cell">
-          <span class="protocol-cell__round protocol-cell__round--winner">+${s.roundScore}</span>
+          <span class="protocol-cell__round ${winnerClass}">+${s.roundScore}</span>
           <span class="protocol-cell__total">${formatScore(s.runningTotal)}</span>
         </div></td>`;
       }
@@ -678,8 +679,9 @@ function viewGame(gameId) {
         </div></td>`;
       }
       if (s.isWinner) {
+        const winnerClass = s.hadNeken ? 'protocol-cell__round--winner protocol-cell__round--winner-neken' : 'protocol-cell__round--winner';
         return `<td><div class="protocol-cell">
-          <span class="protocol-cell__round protocol-cell__round--winner">+${s.roundScore}</span>
+          <span class="protocol-cell__round ${winnerClass}">+${s.roundScore}</span>
           <span class="protocol-cell__total">${formatScore(s.runningTotal)}</span>
         </div></td>`;
       }

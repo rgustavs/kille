@@ -119,6 +119,7 @@ export function calculateScoreTable(game) {
     // Winner
     scores[round.winnerId].isWinner = true;
     scores[round.winnerId].roundScore = round.winnerScore;
+    scores[round.winnerId].hadNeken = round.losers.some(l => l.neken);
 
     // Losers
     round.losers.forEach(l => {
