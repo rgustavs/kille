@@ -621,25 +621,24 @@ function endGame() {
   });
 }
 
-function showGameEndLeaderboard(game) {
+function rankGamePlayers(game) {
   const { totals } = calculateScoreTable(game);
   const players = PlayerStore.getAll();
-  const ranked = game.playerIds
+  return game.playerIds
     .map(pid => ({
       id: pid,
       name: (players.find(p => p.id === pid) || { name: '?' }).name,
       score: totals[pid] || 0
     }))
     .sort((a, b) => b.score - a.score);
+}
 
+function buildPodiumHtml(ranked) {
   const medals = ['🥇', '🥈', '🥉'];
-  // Podium order: 2nd, 1st, 3rd (visual layout)
   const podiumOrder = [1, 0, 2];
-  const podiumEl = $('#podium');
-  const restEl = $('#leaderboard-rest');
-
   const podiumPlayers = ranked.slice(0, Math.min(3, ranked.length));
-  podiumEl.innerHTML = podiumOrder
+
+  const podiumHtml = podiumOrder
     .filter(i => i < podiumPlayers.length)
     .map(i => {
       const p = podiumPlayers[i];
@@ -656,9 +655,9 @@ function showGameEndLeaderboard(game) {
     })
     .join('');
 
-  // Remaining players (4th and beyond)
+  let restHtml = '';
   if (ranked.length > 3) {
-    restEl.innerHTML = ranked.slice(3).map((p, i) => {
+    restHtml = `<div class="leaderboard-rest">${ranked.slice(3).map((p, i) => {
       const scoreClass = p.score > 0 ? 'positive' : p.score < 0 ? 'negative' : 'zero';
       const scoreStr = p.score > 0 ? `+${p.score}` : String(p.score);
       return `
@@ -667,11 +666,22 @@ function showGameEndLeaderboard(game) {
           <span class="leaderboard-rest__name">${escHtml(p.name)}</span>
           <span class="leaderboard-rest__score podium__score--${scoreClass}">${scoreStr}</span>
         </div>`;
-    }).join('');
-  } else {
-    restEl.innerHTML = '';
+    }).join('')}</div>`;
   }
 
+  return `<div class="podium">${podiumHtml}</div>${restHtml}`;
+}
+
+function showGameEndLeaderboard(game) {
+  const ranked = rankGamePlayers(game);
+  const { podiumEl, restEl } = { podiumEl: $('#podium'), restEl: $('#leaderboard-rest') };
+  const html = buildPodiumHtml(ranked);
+  // Split into podium + rest parts for the overlay's separate elements
+  const temp = document.createElement('div');
+  temp.innerHTML = html;
+  podiumEl.innerHTML = temp.querySelector('.podium').innerHTML;
+  const rest = temp.querySelector('.leaderboard-rest');
+  restEl.innerHTML = rest ? rest.innerHTML : '';
   $('#leaderboard-overlay').classList.add('active');
 }
 
@@ -707,9 +717,25 @@ function renderHistory() {
       ? '<span class="history-item__badge history-item__badge--active">Pågår</span>'
       : '<span class="history-item__badge history-item__badge--completed">Avslutad</span>';
 
+    let podiumRow = '';
+    if (g.status === 'completed' && g.rounds.length > 0) {
+      const ranked = rankGamePlayers(g);
+      const medals = ['🥇', '🥈', '🥉'];
+      podiumRow = `<div class="history-item__podium">${ranked.slice(0, 3).map((p, i) => {
+        const scoreClass = p.score > 0 ? 'positive' : p.score < 0 ? 'negative' : 'zero';
+        const scoreStr = p.score > 0 ? `+${p.score}` : String(p.score);
+        return `<span class="history-item__podium-entry">
+          <span class="history-item__podium-medal">${medals[i]}</span>
+          <span class="history-item__podium-name">${escHtml(p.name)}</span>
+          <span class="history-item__podium-score history-item__podium-score--${scoreClass}">${scoreStr}</span>
+        </span>`;
+      }).join('')}</div>`;
+    }
+
     return `<div class="history-item" data-game="${g.id}">
       <div class="history-item__date">${date} ${badge}</div>
       <div class="history-item__players">${escHtml(playerNames)}</div>
+      ${podiumRow}
       <div class="history-item__stats">
         <span>${g.rounds.length} omgångar</span>
         <button class="history-item__delete" data-delete="${g.id}" aria-label="Ta bort spel">✕</button>
@@ -736,6 +762,18 @@ function viewGame(gameId) {
     activeGame = game;
     navigateTo('game');
     return;
+  }
+
+  // Render podium
+  if (game.status === 'completed') {
+    const ranked = rankGamePlayers(game);
+    $('#view-game-podium').innerHTML = `
+      <div class="view-game-podium">
+        <h3 class="view-game-podium__title">Prispall</h3>
+        ${buildPodiumHtml(ranked)}
+      </div>`;
+  } else {
+    $('#view-game-podium').innerHTML = '';
   }
 
   // Render read-only protocol
