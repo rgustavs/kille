@@ -38,6 +38,7 @@
         <button class="btn btn--primary btn--full" id="btn-new-game">🃏 Nytt Spel</button>
         <button class="btn btn--gold btn--full" id="btn-continue-game" style="display:none">▶ Fortsätt Spel</button>
         <button class="btn btn--secondary btn--full" id="btn-history">📜 Historik</button>
+        <button class="btn btn--secondary btn--full" id="btn-stats">📊 Statistik</button>
         <button class="btn btn--ghost btn--full" id="btn-players">👥 Hantera Spelare</button>
       </div>
     </section>
@@ -112,6 +113,45 @@
             <tfoot id="view-protocol-foot"></tfoot>
           </table>
         </div>
+      </div>
+    </section>
+
+    <!-- ── Statistics ── -->
+    <section class="screen app-content" id="screen-stats">
+      <div class="stats-empty" id="stats-empty" style="display:none">
+        <div class="empty-state">
+          <div class="empty-state__icon">📊</div>
+          <div class="empty-state__text">Ingen statistik ännu. Spela minst ett spel för att se statistik.</div>
+        </div>
+      </div>
+
+      <!-- Tab navigation -->
+      <div class="stats-tabs" id="stats-tabs">
+        <button class="stats-tab active" data-tab="leaderboard">Topplista</button>
+        <button class="stats-tab" data-tab="players">Spelare</button>
+        <button class="stats-tab" data-tab="cards">Kort</button>
+        <button class="stats-tab" data-tab="records">Rekord</button>
+      </div>
+
+      <!-- Leaderboard tab -->
+      <div class="stats-panel active" id="stats-leaderboard">
+        <div id="leaderboard-content"></div>
+      </div>
+
+      <!-- Players tab -->
+      <div class="stats-panel" id="stats-players">
+        <div class="stats-player-selector" id="stats-player-selector"></div>
+        <div id="player-detail-content"></div>
+      </div>
+
+      <!-- Cards tab -->
+      <div class="stats-panel" id="stats-cards">
+        <div id="cards-content"></div>
+      </div>
+
+      <!-- Records tab -->
+      <div class="stats-panel" id="stats-records">
+        <div id="records-content"></div>
       </div>
     </section>
 
