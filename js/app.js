@@ -615,10 +615,69 @@ function endGame() {
     activeGame = completeGame(activeGame);
     GameStore.save(activeGame);
     GameStore.clearActive();
+    showGameEndLeaderboard(activeGame);
     activeGame = null;
-    navigateTo('home', { replace: true });
-    screenStack.length = 0;
   });
+}
+
+function showGameEndLeaderboard(game) {
+  const { totals } = calculateScoreTable(game);
+  const players = PlayerStore.getAll();
+  const ranked = game.playerIds
+    .map(pid => ({
+      id: pid,
+      name: (players.find(p => p.id === pid) || { name: '?' }).name,
+      score: totals[pid] || 0
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  const medals = ['🥇', '🥈', '🥉'];
+  // Podium order: 2nd, 1st, 3rd (visual layout)
+  const podiumOrder = [1, 0, 2];
+  const podiumEl = $('#podium');
+  const restEl = $('#leaderboard-rest');
+
+  const podiumPlayers = ranked.slice(0, Math.min(3, ranked.length));
+  podiumEl.innerHTML = podiumOrder
+    .filter(i => i < podiumPlayers.length)
+    .map(i => {
+      const p = podiumPlayers[i];
+      const place = i + 1;
+      const scoreClass = p.score > 0 ? 'positive' : p.score < 0 ? 'negative' : 'zero';
+      const scoreStr = p.score > 0 ? `+${p.score}` : String(p.score);
+      return `
+        <div class="podium__place podium__place--${place}">
+          <div class="podium__medal">${medals[i]}</div>
+          <div class="podium__name">${escHtml(p.name)}</div>
+          <div class="podium__score podium__score--${scoreClass}">${scoreStr}</div>
+          <div class="podium__bar"></div>
+        </div>`;
+    })
+    .join('');
+
+  // Remaining players (4th and beyond)
+  if (ranked.length > 3) {
+    restEl.innerHTML = ranked.slice(3).map((p, i) => {
+      const scoreClass = p.score > 0 ? 'positive' : p.score < 0 ? 'negative' : 'zero';
+      const scoreStr = p.score > 0 ? `+${p.score}` : String(p.score);
+      return `
+        <div class="leaderboard-rest__item">
+          <span class="leaderboard-rest__rank">${i + 4}.</span>
+          <span class="leaderboard-rest__name">${escHtml(p.name)}</span>
+          <span class="leaderboard-rest__score podium__score--${scoreClass}">${scoreStr}</span>
+        </div>`;
+    }).join('');
+  } else {
+    restEl.innerHTML = '';
+  }
+
+  $('#leaderboard-overlay').classList.add('active');
+}
+
+function closeLeaderboard() {
+  $('#leaderboard-overlay').classList.remove('active');
+  navigateTo('home', { replace: true });
+  screenStack.length = 0;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1133,6 +1192,7 @@ function bindEvents() {
   $('#btn-new-round').addEventListener('click', openRoundModal);
   $('#btn-undo-round').addEventListener('click', undoLastRound);
   $('#btn-end-game').addEventListener('click', endGame);
+  $('#btn-leaderboard-close').addEventListener('click', closeLeaderboard);
 
   // Round modal
   $('#btn-cancel-round').addEventListener('click', closeRoundModal);
