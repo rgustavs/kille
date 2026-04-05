@@ -287,7 +287,7 @@ export function getMostCommonCard(playerStat) {
 export function getTopCards(cardStats, n = 5) {
   return Object.values(cardStats)
     .filter(c => c.timesPlayed > 0)
-    .sort((a, b) => b.timesPlayed - a.timesPlayed)
+    .sort((a, b) => b.points - a.points || b.timesPlayed - a.timesPlayed)
     .slice(0, n);
 }
 

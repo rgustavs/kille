@@ -1732,6 +1732,64 @@ body {
   text-align: right;
 }
 
+/* ─── Card-player heatmap ────────────────────────────────────────────────── */
+.heatmap-wrap {
+  overflow-x: auto;
+  margin-bottom: var(--space-lg);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--cream-300);
+}
+
+.heatmap-table {
+  border-collapse: collapse;
+  min-width: 100%;
+  font-size: 0.78rem;
+}
+
+.heatmap-table th,
+.heatmap-table td {
+  padding: 5px 8px;
+  text-align: center;
+  white-space: nowrap;
+  border: 1px solid var(--cream-200);
+}
+
+.heatmap-table th {
+  background: var(--cream-100);
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.heatmap-table th.hm-card-col {
+  text-align: left;
+  min-width: 90px;
+}
+
+.heatmap-table td.hm-card-label {
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: var(--cream-50);
+}
+
+.heatmap-table td.hm-card-pts {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  background: var(--cream-50);
+}
+
+.heatmap-cell {
+  border-radius: 3px;
+  font-weight: 600;
+  color: #fff;
+  min-width: 28px;
+}
+
+.heatmap-cell[data-v="0"] {
+  background: var(--cream-100);
+  color: var(--cream-300);
+}
+
 /* ─── Records list ───────────────────────────────────────────────────────── */
 .records-list {
   display: flex;

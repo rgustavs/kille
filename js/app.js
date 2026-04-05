@@ -1024,14 +1024,67 @@ function renderCardStats() {
     return;
   }
 
-  const maxPlayed = topCards[0].timesPlayed;
+  const maxPlayed = Math.max(...topCards.map(c => c.timesPlayed));
+
+  // Collect players who appear in any card's playerFrequency, sorted by total losses desc
+  const playerTotals = {};
+  topCards.forEach(c => {
+    Object.entries(c.playerFrequency).forEach(([pid, cnt]) => {
+      playerTotals[pid] = (playerTotals[pid] || 0) + cnt;
+    });
+  });
+  const heatmapPlayers = Object.entries(playerTotals)
+    .sort((a, b) => b[1] - a[1])
+    .map(([pid]) => ({ id: pid, name: PlayerStore.get(pid)?.name || '?' }));
+
+  // Global max cell value for color scaling
+  const globalMax = heatmapPlayers.length > 0
+    ? Math.max(...topCards.flatMap(c => heatmapPlayers.map(p => c.playerFrequency[p.id] || 0)))
+    : 1;
+
+  function heatColor(val) {
+    if (val === 0) return null;
+    const t = val / globalMax; // 0..1
+    // interpolate cream-200 → green-700
+    const r = Math.round(245 - t * (245 - 26));
+    const g = Math.round(239 - t * (239 - 77));
+    const b = Math.round(224 - t * (224 - 46));
+    return `rgb(${r},${g},${b})`;
+  }
+
+  const heatmapHtml = `
+    <h3 class="stats-section-title">Heatmap — spelare vs kort</h3>
+    <div class="heatmap-wrap">
+      <table class="heatmap-table">
+        <thead>
+          <tr>
+            <th class="hm-card-col">Kort</th>
+            <th>p</th>
+            ${heatmapPlayers.map(p => `<th>${escHtml(p.name)}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${topCards.map(c => {
+            return `<tr>
+              <td class="hm-card-label">${escHtml(c.name)}</td>
+              <td class="hm-card-pts">${c.points}</td>
+              ${heatmapPlayers.map(p => {
+                const v = c.playerFrequency[p.id] || 0;
+                const bg = heatColor(v);
+                const style = bg ? `background:${bg};color:#fff` : '';
+                return `<td class="heatmap-cell" data-v="${v}" style="${style}">${v || ''}</td>`;
+              }).join('')}
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
 
   container.innerHTML = `
     <h3 class="stats-section-title">Mest spelade kort</h3>
     <div class="card-freq-list">
       ${topCards.map(c => {
         const pct = Math.round(c.timesPlayed / maxPlayed * 100);
-        const nekenPct = c.timesPlayed > 0 ? Math.round(c.timesWithNeken / c.timesPlayed * 100) : 0;
         return `<div class="card-freq-item">
           <span class="card-freq-name">${escHtml(c.name)} <span style="color:var(--text-muted);font-size:0.75rem">${c.points}p</span></span>
           <div class="card-freq-bar-wrap"><div class="card-freq-bar" style="width: ${pct}%"></div></div>
@@ -1040,25 +1093,7 @@ function renderCardStats() {
       }).join('')}
     </div>
 
-    <h3 class="stats-section-title">Kort per spelare</h3>
-    ${topCards.slice(0, 10).map(c => {
-      const playerEntries = Object.entries(c.playerFrequency)
-        .map(([pid, count]) => ({ name: PlayerStore.get(pid)?.name || '?', count }))
-        .sort((a, b) => b.count - a.count);
-      if (playerEntries.length === 0) return '';
-      const cardMax = playerEntries[0].count;
-      return `
-        <div style="margin-bottom:var(--space-md)">
-          <div style="font-weight:600;font-size:0.85rem;margin-bottom:var(--space-xs);color:var(--text-secondary)">${escHtml(c.name)}</div>
-          <div class="card-freq-list">
-            ${playerEntries.map(pe => `<div class="card-freq-item">
-              <span class="card-freq-name">${escHtml(pe.name)}</span>
-              <div class="card-freq-bar-wrap"><div class="card-freq-bar" style="width: ${Math.round(pe.count / cardMax * 100)}%"></div></div>
-              <span class="card-freq-count">${pe.count}</span>
-            </div>`).join('')}
-          </div>
-        </div>`;
-    }).join('')}
+    ${heatmapHtml}
   `;
 }
 
