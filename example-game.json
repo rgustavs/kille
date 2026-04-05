@@ -1,0 +1,152 @@
+{
+  "version": "1.0",
+  "exportedAt": "2026-04-05T14:06:00.000Z",
+  "players": [
+    { "id": "p_richard", "name": "Richard", "createdAt": "2026-04-05T12:00:00.000Z" },
+    { "id": "p_nils",    "name": "Nils",    "createdAt": "2026-04-05T12:00:00.000Z" },
+    { "id": "p_greta",   "name": "Greta",   "createdAt": "2026-04-05T12:00:00.000Z" },
+    { "id": "p_rama",    "name": "Rama",    "createdAt": "2026-04-05T12:00:00.000Z" },
+    { "id": "p_karin",   "name": "Karin",   "createdAt": "2026-04-05T12:00:00.000Z" }
+  ],
+  "games": [
+    {
+      "id": "game_example_1",
+      "playerIds": ["p_richard", "p_nils", "p_greta", "p_rama", "p_karin"],
+      "status": "completed",
+      "createdAt":   "2026-04-05T12:00:00.000Z",
+      "completedAt": "2026-04-05T14:06:00.000Z",
+      "rounds": [
+        {
+          "roundNumber": 1,
+          "timestamp": "2026-04-05T12:10:00.000Z",
+          "winnerId": "p_nils",
+          "winnerScore": 180,
+          "standByIds": [],
+          "losers": [
+            { "playerId": "p_richard", "cardId": "blompotten", "score":    0, "neken": false },
+            { "playerId": "p_greta",   "cardId": "blompotten", "score":    0, "neken": false },
+            { "playerId": "p_rama",    "cardId": "harlekin",   "score": -100, "neken": false },
+            { "playerId": "p_karin",   "cardId": "husar",      "score":  -80, "neken": false }
+          ]
+        },
+        {
+          "roundNumber": 2,
+          "timestamp": "2026-04-05T12:20:00.000Z",
+          "winnerId": "p_nils",
+          "winnerScore": 140,
+          "standByIds": [],
+          "losers": [
+            { "playerId": "p_richard", "cardId": "kransen",  "score":   0, "neken": false },
+            { "playerId": "p_greta",   "cardId": "num_9",    "score": -45, "neken": false },
+            { "playerId": "p_rama",    "cardId": "num_5",    "score": -25, "neken": false },
+            { "playerId": "p_karin",   "cardId": "kavall",   "score": -70, "neken": false }
+          ]
+        },
+        {
+          "roundNumber": 3,
+          "timestamp": "2026-04-05T12:30:00.000Z",
+          "winnerId": "p_rama",
+          "winnerScore": 145,
+          "standByIds": [],
+          "losers": [
+            { "playerId": "p_richard", "cardId": "num_6",  "score":  -30, "neken": false },
+            { "playerId": "p_nils",    "cardId": "num_1",  "score":   -5, "neken": false },
+            { "playerId": "p_greta",   "cardId": "num_6",  "score":  -30, "neken": false },
+            { "playerId": "p_karin",   "cardId": "husar",  "score":  -80, "neken": false }
+          ]
+        },
+        {
+          "roundNumber": 4,
+          "timestamp": "2026-04-05T12:40:00.000Z",
+          "winnerId": "p_rama",
+          "winnerScore": 180,
+          "standByIds": [],
+          "losers": [
+            { "playerId": "p_richard", "cardId": "kavall", "score":  -70, "neken": false },
+            { "playerId": "p_nils",    "cardId": "num_2",  "score":  -10, "neken": false },
+            { "playerId": "p_greta",   "cardId": "kuku",   "score":  -90, "neken": false },
+            { "playerId": "p_karin",   "cardId": "num_2",  "score":  -10, "neken": false }
+          ]
+        },
+        {
+          "roundNumber": 5,
+          "timestamp": "2026-04-05T12:50:00.000Z",
+          "winnerId": "p_greta",
+          "winnerScore": 125,
+          "standByIds": [],
+          "losers": [
+            { "playerId": "p_richard", "cardId": "num_3",  "score":  -15, "neken": false },
+            { "playerId": "p_nils",    "cardId": "num_3",  "score":  -15, "neken": false },
+            { "playerId": "p_rama",    "cardId": "num_11", "score":  -55, "neken": false },
+            { "playerId": "p_karin",   "cardId": "num_8",  "score":  -40, "neken": false }
+          ]
+        },
+        {
+          "roundNumber": 6,
+          "timestamp": "2026-04-05T13:00:00.000Z",
+          "winnerId": "p_greta",
+          "winnerScore": 125,
+          "standByIds": [],
+          "losers": [
+            { "playerId": "p_richard", "cardId": "num_6",  "score":  -30, "neken": false },
+            { "playerId": "p_nils",    "cardId": "num_2",  "score":  -10, "neken": false },
+            { "playerId": "p_rama",    "cardId": "num_1",  "score":   -5, "neken": false },
+            { "playerId": "p_karin",   "cardId": "husar",  "score":  -80, "neken": false }
+          ]
+        },
+        {
+          "roundNumber": 7,
+          "timestamp": "2026-04-05T13:10:00.000Z",
+          "winnerId": "p_rama",
+          "winnerScore": 125,
+          "standByIds": [],
+          "losers": [
+            { "playerId": "p_richard", "cardId": "num_5",    "score":  -25, "neken": false },
+            { "playerId": "p_nils",    "cardId": "kransen",  "score":    0, "neken": false },
+            { "playerId": "p_greta",   "cardId": "vardshus", "score":  -65, "neken": false },
+            { "playerId": "p_karin",   "cardId": "num_7",    "score":  -35, "neken": false }
+          ]
+        },
+        {
+          "roundNumber": 8,
+          "timestamp": "2026-04-05T13:20:00.000Z",
+          "winnerId": "p_nils",
+          "winnerScore": 130,
+          "standByIds": [],
+          "losers": [
+            { "playerId": "p_richard", "cardId": "num_1",    "score":   -5, "neken": false },
+            { "playerId": "p_greta",   "cardId": "num_5",    "score":  -25, "neken": false },
+            { "playerId": "p_rama",    "cardId": "num_7",    "score":  -35, "neken": false },
+            { "playerId": "p_karin",   "cardId": "vardshus", "score":  -65, "neken": false }
+          ]
+        },
+        {
+          "roundNumber": 9,
+          "timestamp": "2026-04-05T13:30:00.000Z",
+          "winnerId": "p_karin",
+          "winnerScore": 105,
+          "standByIds": [],
+          "losers": [
+            { "playerId": "p_richard", "cardId": "num_3",  "score":  -15, "neken": false },
+            { "playerId": "p_nils",    "cardId": "num_2",  "score":  -10, "neken": false },
+            { "playerId": "p_greta",   "cardId": "num_11", "score":  -55, "neken": false },
+            { "playerId": "p_rama",    "cardId": "num_5",  "score":  -25, "neken": false }
+          ]
+        },
+        {
+          "roundNumber": 10,
+          "timestamp": "2026-04-05T13:40:00.000Z",
+          "winnerId": "p_nils",
+          "winnerScore": 110,
+          "standByIds": [],
+          "losers": [
+            { "playerId": "p_richard", "cardId": "vardshus", "score":  -65, "neken": false },
+            { "playerId": "p_greta",   "cardId": "num_7",    "score":  -35, "neken": false },
+            { "playerId": "p_rama",    "cardId": "num_2",    "score":  -10, "neken": false },
+            { "playerId": "p_karin",   "cardId": "kransen",  "score":    0, "neken": false }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -8,6 +8,7 @@ import {
   createGame, addRound, removeLastRound, completeGame, calculateScoreTable
 } from './game.js';
 import { computeAdvancedStats, getMostCommonCard, getTopCards, getLeaderboard } from './stats.js';
+import { downloadExport, importFile } from './importexport.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STATE
@@ -1115,6 +1116,52 @@ function formatScore(score) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// IMPORT / EXPORT
+// ═══════════════════════════════════════════════════════════════════════════
+function handleExport() {
+  downloadExport();
+  showToast('Data exporterad');
+}
+
+function handleImport() {
+  $('#input-import-file').click();
+}
+
+async function handleImportFile(file) {
+  if (!file) return;
+  try {
+    const { playersAdded, gamesAdded } = await importFile(file);
+    // Invalidate store caches so the app reads fresh data
+    PlayerStore._cache = null;
+    GameStore._cache = null;
+    activeGame = GameStore.getActive();
+    renderHome();
+    showToast(`Importerat: ${gamesAdded} spel, ${playersAdded} nya spelare`);
+  } catch (err) {
+    showToast(`Import misslyckades: ${err.message}`);
+  }
+  // Reset file input so the same file can be imported again if needed
+  $('#input-import-file').value = '';
+}
+
+// ─── Toast ───────────────────────────────────────────────────────────────────
+let toastTimer = null;
+
+function showToast(message) {
+  let toast = $('#app-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'app-toast';
+    toast.className = 'app-toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.classList.add('app-toast--visible');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('app-toast--visible'), 3000);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // SWIPE TO DISMISS
 // ═══════════════════════════════════════════════════════════════════════════
 function addSwipeToDismiss(sheetEl, closeFn) {
@@ -1170,6 +1217,9 @@ function bindEvents() {
   });
   $('#btn-history').addEventListener('click', () => navigateTo('history'));
   $('#btn-stats').addEventListener('click', () => navigateTo('stats'));
+  $('#btn-export').addEventListener('click', handleExport);
+  $('#btn-import').addEventListener('click', handleImport);
+  $('#input-import-file').addEventListener('change', e => handleImportFile(e.target.files[0]));
 
   // Player management
   $('#btn-add-player').addEventListener('click', addPlayer);
