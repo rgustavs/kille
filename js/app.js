@@ -1024,7 +1024,7 @@ function renderCardStats() {
     return;
   }
 
-  const maxPlayed = topCards[0].timesPlayed;
+  const maxPlayed = Math.max(...topCards.map(c => c.timesPlayed));
 
   container.innerHTML = `
     <h3 class="stats-section-title">Mest spelade kort</h3>
