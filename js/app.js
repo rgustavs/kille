@@ -712,9 +712,19 @@ function renderHistory() {
       <div class="history-item__players">${escHtml(playerNames)}</div>
       <div class="history-item__stats">
         <span>${g.rounds.length} omgångar</span>
+        <button class="history-item__delete" data-delete="${g.id}" aria-label="Ta bort spel">✕</button>
       </div>
     </div>`;
   }).join('');
+}
+
+function deleteGame(gameId) {
+  const game = GameStore.get(gameId);
+  if (!game) return;
+  showConfirm('Ta bort spelet? Det kan inte återställas.', () => {
+    GameStore.remove(gameId);
+    renderHistory();
+  });
 }
 
 function viewGame(gameId) {
@@ -783,7 +793,7 @@ function renderStats() {
   const games = GameStore.getAll();
   const players = PlayerStore.getAll();
 
-  const gamesWithRounds = games.filter(g => g.rounds.length > 0);
+  const gamesWithRounds = games.filter(g => g.status === 'completed' && g.rounds.length > 0);
   const emptyEl = $('#stats-empty');
   const tabsEl = $('#stats-tabs');
 
@@ -1308,6 +1318,11 @@ function bindEvents() {
 
   // History
   $('#history-list').addEventListener('click', (e) => {
+    const deleteBtn = e.target.closest('.history-item__delete');
+    if (deleteBtn) {
+      deleteGame(deleteBtn.dataset.delete);
+      return;
+    }
     const item = e.target.closest('.history-item');
     if (item) viewGame(item.dataset.game);
   });
