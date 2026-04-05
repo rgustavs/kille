@@ -37,7 +37,7 @@ export function createGame(playerIds) {
  * @returns {object} The updated game state
  */
 export function addRound(game, roundData) {
-  const { winnerId, standByIds = [], losers = [] } = roundData;
+  const { winnerId, winnerCardId = null, standByIds = [], losers = [] } = roundData;
 
   // Calculate winner score = sum of all loser card points (neken = doubled)
   let winnerScore = 0;
@@ -52,6 +52,7 @@ export function addRound(game, roundData) {
   const round = {
     roundNumber: game.rounds.length + 1,
     winnerId,
+    winnerCardId: winnerCardId || null,
     winnerScore: winnerScore,
     standByIds: [...standByIds],
     losers: loserEntries,
@@ -119,6 +120,7 @@ export function calculateScoreTable(game) {
     // Winner
     scores[round.winnerId].isWinner = true;
     scores[round.winnerId].roundScore = round.winnerScore;
+    scores[round.winnerId].cardId = round.winnerCardId || null;
     scores[round.winnerId].hadNeken = round.losers.some(l => l.neken);
 
     // Losers
