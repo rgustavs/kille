@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kille-cache-v1';
+const CACHE_NAME = 'kille-cache-v2';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -9,7 +9,8 @@ self.addEventListener('install', (event) => {
         './css/style.css',
         './js/app.js',
         './js/cards.js',
-        './js/game.js'
+        './js/game.js',
+        './js/stats.js'
       ]);
     })
   );

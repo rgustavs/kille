@@ -7,6 +7,7 @@ import { PlayerStore, GameStore } from './store.js';
 import {
   createGame, addRound, removeLastRound, completeGame, calculateScoreTable
 } from './game.js';
+import { computeAdvancedStats, getMostCommonCard, getTopCards, getLeaderboard } from './stats.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STATE
@@ -31,6 +32,10 @@ let roundState = {
 // Card picker
 let cardPickerTarget = null; // playerId being assigned
 let cardPickerCallback = null;
+
+// Stats
+let selectedStatsPlayerId = null;
+let cachedStats = null;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DOM REFERENCES
@@ -70,7 +75,8 @@ function updateHeader(screenId) {
     setup: 'Nytt Spel',
     game: 'Protokoll',
     history: 'Historik',
-    'view-game': 'Spelprotokoll'
+    'view-game': 'Spelprotokoll',
+    stats: 'Statistik'
   };
   $('#header-title').textContent = titles[screenId] || 'Kille';
   const backBtn = $('#btn-back');
@@ -90,6 +96,7 @@ function renderScreen(screenId) {
     case 'setup': renderSetup(); break;
     case 'game': renderGame(); break;
     case 'history': renderHistory(); break;
+    case 'stats': renderStats(); break;
     case 'view-game': break; // rendered when entering
   }
 }
@@ -710,6 +717,315 @@ function viewGame(gameId) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// STATISTICS
+// ═══════════════════════════════════════════════════════════════════════════
+function renderStats() {
+  const games = GameStore.getAll();
+  const players = PlayerStore.getAll();
+
+  const gamesWithRounds = games.filter(g => g.rounds.length > 0);
+  const emptyEl = $('#stats-empty');
+  const tabsEl = $('#stats-tabs');
+
+  if (gamesWithRounds.length === 0) {
+    emptyEl.style.display = '';
+    tabsEl.style.display = 'none';
+    $$('.stats-panel').forEach(el => el.style.display = 'none');
+    return;
+  }
+
+  emptyEl.style.display = 'none';
+  tabsEl.style.display = '';
+
+  cachedStats = computeAdvancedStats(games, players);
+
+  // Render active tab
+  const activeTab = $('.stats-tab.active')?.dataset.tab || 'leaderboard';
+  renderStatsTab(activeTab);
+}
+
+function switchStatsTab(tab) {
+  $$('.stats-tab').forEach(el => el.classList.toggle('active', el.dataset.tab === tab));
+  $$('.stats-panel').forEach(el => el.classList.remove('active'));
+  $(`#stats-${tab}`).classList.add('active');
+  renderStatsTab(tab);
+}
+
+function renderStatsTab(tab) {
+  if (!cachedStats) return;
+  switch (tab) {
+    case 'leaderboard': renderLeaderboard(); break;
+    case 'players': renderPlayerStats(); break;
+    case 'cards': renderCardStats(); break;
+    case 'records': renderRecords(); break;
+  }
+}
+
+function renderLeaderboard() {
+  const leaderboard = getLeaderboard(cachedStats.players);
+  const container = $('#leaderboard-content');
+
+  if (leaderboard.length === 0) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-state__text">Ingen data ännu.</div></div>';
+    return;
+  }
+
+  container.innerHTML = `<div class="leaderboard">${leaderboard.map(p => {
+    const scoreClass = p.totalScore > 0 ? 'positive' : p.totalScore < 0 ? 'negative' : 'zero';
+    return `<div class="leaderboard-item">
+      <div class="leaderboard-rank">${p.rank}</div>
+      <div class="leaderboard-avatar">${p.name.charAt(0).toUpperCase()}</div>
+      <div class="leaderboard-info">
+        <div class="leaderboard-name">${escHtml(p.name)}</div>
+        <div class="leaderboard-meta">${p.gamesPlayed} spel &middot; ${p.roundsWon} v/${p.roundsPlayed} r &middot; ${p.winRate}%</div>
+      </div>
+      <div class="leaderboard-score ${scoreClass}">${p.totalScore > 0 ? '+' : ''}${p.totalScore}</div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function renderPlayerStats() {
+  const players = PlayerStore.getAll().filter(p => cachedStats.players[p.id]?.gamesPlayed > 0);
+  const selector = $('#stats-player-selector');
+  const detail = $('#player-detail-content');
+
+  if (players.length === 0) {
+    selector.innerHTML = '';
+    detail.innerHTML = '<div class="empty-state"><div class="empty-state__text">Ingen spelardata ännu.</div></div>';
+    return;
+  }
+
+  // Auto-select first player if none selected
+  if (!selectedStatsPlayerId || !players.find(p => p.id === selectedStatsPlayerId)) {
+    selectedStatsPlayerId = players[0].id;
+  }
+
+  selector.innerHTML = players.map(p =>
+    `<button class="stats-player-btn ${p.id === selectedStatsPlayerId ? 'active' : ''}" data-player-stats="${p.id}">${escHtml(p.name)}</button>`
+  ).join('');
+
+  renderPlayerDetail(selectedStatsPlayerId);
+}
+
+function renderPlayerDetail(playerId) {
+  const ps = cachedStats.players[playerId];
+  const player = PlayerStore.get(playerId);
+  if (!ps || !player) return;
+
+  const detail = $('#player-detail-content');
+  const commonCard = getMostCommonCard(ps);
+  const avgScore = ps.avgScorePerRound;
+  const avgClass = avgScore > 0 ? 'positive' : avgScore < 0 ? 'negative' : '';
+
+  // Score history chart
+  let chartHtml = '';
+  if (ps.scoreHistory.length > 1) {
+    const scores = ps.scoreHistory.map(h => h.score);
+    const maxAbs = Math.max(...scores.map(Math.abs), 1);
+    chartHtml = `
+      <h3 class="stats-section-title">Poängutveckling</h3>
+      <div class="score-chart">
+        <div class="score-chart__bars">
+          ${scores.map(s => {
+            const pct = Math.round(Math.abs(s) / maxAbs * 100);
+            const cls = s >= 0 ? 'score-chart__bar--positive' : 'score-chart__bar--negative';
+            return `<div class="score-chart__bar ${cls}" style="height: ${Math.max(pct, 4)}%" title="${s > 0 ? '+' : ''}${s}"></div>`;
+          }).join('')}
+        </div>
+      </div>`;
+  }
+
+  // Card frequency
+  let cardHtml = '';
+  const cardEntries = Object.entries(ps.cardFrequency).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  if (cardEntries.length > 0) {
+    const maxCount = cardEntries[0][1];
+    cardHtml = `
+      <h3 class="stats-section-title">Vanligaste kort</h3>
+      <div class="card-freq-list">
+        ${cardEntries.map(([cardId, count]) => {
+          const card = getCardById(cardId);
+          if (!card) return '';
+          const pct = Math.round(count / maxCount * 100);
+          return `<div class="card-freq-item">
+            <span class="card-freq-name">${escHtml(card.name)}</span>
+            <div class="card-freq-bar-wrap"><div class="card-freq-bar" style="width: ${pct}%"></div></div>
+            <span class="card-freq-count">${count}</span>
+          </div>`;
+        }).join('')}
+      </div>`;
+  }
+
+  // Head-to-head
+  let h2hHtml = '';
+  const opponents = Object.entries(ps.opponents);
+  if (opponents.length > 0) {
+    h2hHtml = `
+      <h3 class="stats-section-title">Mot andra spelare</h3>
+      <div class="h2h-list">
+        ${opponents.map(([oppId, rec]) => {
+          const opp = PlayerStore.get(oppId);
+          if (!opp) return '';
+          return `<div class="h2h-item">
+            <span class="h2h-name">${escHtml(opp.name)}</span>
+            <span class="h2h-record"><span class="h2h-wins">${rec.wins}V</span> / <span class="h2h-losses">${rec.losses}F</span></span>
+          </div>`;
+        }).join('')}
+      </div>`;
+  }
+
+  // Streak
+  let streakText = '—';
+  if (ps.currentStreak.type === 'win') {
+    streakText = `${ps.currentStreak.count} vinst${ps.currentStreak.count > 1 ? 'er' : ''} i rad`;
+  } else if (ps.currentStreak.type === 'loss') {
+    streakText = `${ps.currentStreak.count} förlust${ps.currentStreak.count > 1 ? 'er' : ''} i rad`;
+  }
+
+  detail.innerHTML = `
+    <div class="player-detail-header">
+      <div class="player-detail-avatar">${player.name.charAt(0).toUpperCase()}</div>
+      <div class="player-detail-name">${escHtml(player.name)}</div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-card__value">${ps.gamesPlayed}</div>
+        <div class="stat-card__label">Spel</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card__value">${ps.gamesWon}</div>
+        <div class="stat-card__label">Vunna spel</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card__value">${ps.roundsWon}</div>
+        <div class="stat-card__label">Vunna rundor</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card__value">${ps.winRate}%</div>
+        <div class="stat-card__label">Vinstprocent</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card__value ${ps.totalScore > 0 ? 'positive' : ps.totalScore < 0 ? 'negative' : ''}">${ps.totalScore > 0 ? '+' : ''}${ps.totalScore}</div>
+        <div class="stat-card__label">Totalpoäng</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card__value ${avgClass}">${avgScore > 0 ? '+' : ''}${avgScore}</div>
+        <div class="stat-card__label">Snitt/runda</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card__value positive">${ps.bestRoundScore !== null ? '+' + ps.bestRoundScore : '—'}</div>
+        <div class="stat-card__label">Bästa runda</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card__value negative">${ps.worstRoundScore !== null ? ps.worstRoundScore : '—'}</div>
+        <div class="stat-card__label">Sämsta runda</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card__value">${ps.nekenGiven}</div>
+        <div class="stat-card__label">Neken (fått)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card__value">${ps.nekenAsWinner}</div>
+        <div class="stat-card__label">Neken (vunnit)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card__value">${commonCard ? escHtml(commonCard.card.name) : '—'}</div>
+        <div class="stat-card__label">Vanligaste kort</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card__value">${streakText}</div>
+        <div class="stat-card__label">Streak</div>
+      </div>
+    </div>
+
+    ${chartHtml}
+    ${cardHtml}
+    ${h2hHtml}
+  `;
+}
+
+function renderCardStats() {
+  const container = $('#cards-content');
+  const topCards = getTopCards(cachedStats.cards, 20);
+
+  if (topCards.length === 0) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-state__text">Ingen kortdata ännu.</div></div>';
+    return;
+  }
+
+  const maxPlayed = topCards[0].timesPlayed;
+
+  container.innerHTML = `
+    <h3 class="stats-section-title">Mest spelade kort</h3>
+    <div class="card-freq-list">
+      ${topCards.map(c => {
+        const pct = Math.round(c.timesPlayed / maxPlayed * 100);
+        const nekenPct = c.timesPlayed > 0 ? Math.round(c.timesWithNeken / c.timesPlayed * 100) : 0;
+        return `<div class="card-freq-item">
+          <span class="card-freq-name">${escHtml(c.name)} <span style="color:var(--text-muted);font-size:0.75rem">${c.points}p</span></span>
+          <div class="card-freq-bar-wrap"><div class="card-freq-bar" style="width: ${pct}%"></div></div>
+          <span class="card-freq-count">${c.timesPlayed}${c.timesWithNeken > 0 ? ` <span class="neken-badge">N${c.timesWithNeken}</span>` : ''}</span>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <h3 class="stats-section-title">Kort per spelare</h3>
+    ${topCards.slice(0, 10).map(c => {
+      const playerEntries = Object.entries(c.playerFrequency)
+        .map(([pid, count]) => ({ name: PlayerStore.get(pid)?.name || '?', count }))
+        .sort((a, b) => b.count - a.count);
+      if (playerEntries.length === 0) return '';
+      const cardMax = playerEntries[0].count;
+      return `
+        <div style="margin-bottom:var(--space-md)">
+          <div style="font-weight:600;font-size:0.85rem;margin-bottom:var(--space-xs);color:var(--text-secondary)">${escHtml(c.name)}</div>
+          <div class="card-freq-list">
+            ${playerEntries.map(pe => `<div class="card-freq-item">
+              <span class="card-freq-name">${escHtml(pe.name)}</span>
+              <div class="card-freq-bar-wrap"><div class="card-freq-bar" style="width: ${Math.round(pe.count / cardMax * 100)}%"></div></div>
+              <span class="card-freq-count">${pe.count}</span>
+            </div>`).join('')}
+          </div>
+        </div>`;
+    }).join('')}
+  `;
+}
+
+function renderRecords() {
+  const container = $('#records-content');
+  const r = cachedStats.records;
+
+  const items = [
+    { icon: '🏆', title: 'Flest vunna spel', holder: r.mostGamesWon, format: v => `${v.count} spel` },
+    { icon: '⚜', title: 'Flest vunna rundor', holder: r.mostRoundsWon, format: v => `${v.count} rundor` },
+    { icon: '🎮', title: 'Flest spelade spel', holder: r.mostGamesPlayed, format: v => `${v.count} spel` },
+    { icon: '🔥', title: 'Bästa runda (poäng)', holder: r.highestRoundScore, format: v => `+${v.score}` },
+    { icon: '💀', title: 'Sämsta runda (poäng)', holder: r.lowestRoundScore, format: v => `${v.score}` },
+    { icon: '📈', title: 'Bästa spel (totalt)', holder: r.highestGameScore, format: v => `+${v.score}` },
+    { icon: '📉', title: 'Sämsta spel (totalt)', holder: r.lowestGameScore, format: v => `${v.score}` },
+    { icon: '😈', title: 'Flest neken', holder: r.mostNeken, format: v => `${v.count} gånger` },
+    { icon: '🔥', title: 'Längsta vinstsvit', holder: r.longestWinStreak, format: v => `${v.count} spel` },
+  ].filter(item => item.holder && (item.holder.count > 0 || item.holder.score !== undefined));
+
+  if (items.length === 0) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-state__text">Inga rekord ännu.</div></div>';
+    return;
+  }
+
+  container.innerHTML = `<div class="records-list">${items.map(item => `
+    <div class="record-item">
+      <div class="record-icon">${item.icon}</div>
+      <div class="record-info">
+        <div class="record-title">${item.title}</div>
+        <div class="record-holder">${escHtml(item.holder.name)}</div>
+      </div>
+      <div class="record-value">${item.format(item.holder)}</div>
+    </div>
+  `).join('')}</div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // CONFIRM DIALOG
 // ═══════════════════════════════════════════════════════════════════════════
 let confirmCallback = null;
@@ -794,6 +1110,7 @@ function bindEvents() {
     if (activeGame) navigateTo('game');
   });
   $('#btn-history').addEventListener('click', () => navigateTo('history'));
+  $('#btn-stats').addEventListener('click', () => navigateTo('stats'));
 
   // Player management
   $('#btn-add-player').addEventListener('click', addPlayer);
@@ -865,6 +1182,19 @@ function bindEvents() {
     closeConfirm();
   });
   $('#confirm-no').addEventListener('click', closeConfirm);
+
+  // Stats
+  $('#stats-tabs').addEventListener('click', (e) => {
+    const tab = e.target.closest('.stats-tab');
+    if (tab) switchStatsTab(tab.dataset.tab);
+  });
+  $('#stats-player-selector').addEventListener('click', (e) => {
+    const btn = e.target.closest('.stats-player-btn');
+    if (btn) {
+      selectedStatsPlayerId = btn.dataset.playerStats;
+      renderPlayerStats();
+    }
+  });
 
   // History
   $('#history-list').addEventListener('click', (e) => {
