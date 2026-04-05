@@ -222,6 +222,38 @@ body {
   padding: var(--space-md) var(--space-lg);
 }
 
+.home-data-actions {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.btn--half {
+  flex: 1;
+}
+
+/* ── Toast notification ── */
+.app-toast {
+  position: fixed;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--space-xl));
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--green-800);
+  color: #fff;
+  padding: var(--space-sm) var(--space-lg);
+  border-radius: 999px;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease, transform 200ms ease;
+  z-index: 9999;
+}
+
+.app-toast--visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
 /* ─── Buttons ─────────────────────────────────────────────────────────────── */
 .btn {
   display: inline-flex;
