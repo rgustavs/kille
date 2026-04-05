@@ -12,7 +12,7 @@ import { calculateScoreTable } from './game.js';
  * @returns {object} { players: {}, cards: {}, records: {}, headToHead: {} }
  */
 export function computeAdvancedStats(games, players) {
-  const completedGames = games.filter(g => g.rounds.length > 0);
+  const completedGames = games.filter(g => g.status === 'completed' && g.rounds.length > 0);
 
   const playerStats = {};
   players.forEach(p => {

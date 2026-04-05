@@ -1100,6 +1100,24 @@ body {
   gap: var(--space-lg);
   font-size: 0.85rem;
   color: var(--text-secondary);
+  align-items: center;
+}
+
+.history-item__delete {
+  margin-left: auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition-base), background var(--transition-base);
+  line-height: 1;
+}
+.history-item__delete:hover {
+  color: var(--red-600, #dc2626);
+  background: var(--red-50, #fef2f2);
 }
 
 .history-item__badge {
