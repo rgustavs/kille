@@ -7,7 +7,7 @@ import { PlayerStore, GameStore } from './store.js';
 import {
   createGame, addRound, removeLastRound, completeGame, calculateScoreTable
 } from './game.js';
-import { computeAdvancedStats, getMostCommonCard, getTopCards, getLeaderboard } from './stats.js';
+import { computeAdvancedStats, getMostCommonCard, getMostCommonWinnerCard, getTopCards, getLeaderboard } from './stats.js';
 import { downloadExport, importFile } from './importexport.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -26,6 +26,7 @@ let activeGame = null;
 let roundState = {
   standByIds: new Set(),
   winnerId: null,
+  winnerCardId: null,
   loserCards: {}, // { playerId: cardId }
   nekenIds: new Set()
 };
@@ -254,9 +255,11 @@ function renderGame() {
       }
       if (s.isWinner) {
         const winnerClass = s.hadNeken ? 'protocol-cell__round--winner protocol-cell__round--winner-neken' : 'protocol-cell__round--winner';
+        const winnerCard = s.cardId ? getCardById(s.cardId) : null;
         return `<td><div class="protocol-cell">
           <span class="protocol-cell__round ${winnerClass}">+${s.roundScore}</span>
           <span class="protocol-cell__total">${formatScore(s.runningTotal)}</span>
+          ${winnerCard ? `<span class="protocol-cell__card protocol-cell__card--winner">${escHtml(winnerCard.name)}</span>` : ''}
         </div></td>`;
       }
       const card = s.cardId ? getCardById(s.cardId) : null;
@@ -290,6 +293,7 @@ function openRoundModal() {
   roundState = {
     standByIds: new Set(),
     winnerId: null,
+    winnerCardId: null,
     loserCards: {},
     nekenIds: new Set()
   };
@@ -299,6 +303,7 @@ function openRoundModal() {
 
   renderStandbyGrid();
   renderWinnerGrid();
+  renderWinnerCardAssignment();
   renderLoserAssignments();
   updateRoundPreview();
 
@@ -361,10 +366,12 @@ function renderWinnerGrid() {
 
 function selectWinner(playerId) {
   roundState.winnerId = playerId;
+  roundState.winnerCardId = null;
   // Remove winner from loser cards and neken
   delete roundState.loserCards[playerId];
   roundState.nekenIds.delete(playerId);
   renderWinnerGrid();
+  renderWinnerCardAssignment();
   renderLoserAssignments();
   updateRoundPreview();
 }
@@ -436,6 +443,27 @@ function getNekenCards() {
   return result;
 }
 
+function renderWinnerCardAssignment() {
+  const section = $('#winner-card-section');
+  const container = $('#winner-card-assignment');
+
+  if (!roundState.winnerId) {
+    section.style.display = 'none';
+    return;
+  }
+
+  section.style.display = '';
+  const player = PlayerStore.get(roundState.winnerId) || { id: roundState.winnerId, name: '?' };
+  const card = roundState.winnerCardId ? getCardById(roundState.winnerCardId) : null;
+
+  container.innerHTML = `<div class="loser-row">
+    <span class="loser-row__name">${escHtml(player.name)} 👑</span>
+    <button class="loser-row__card-btn ${card ? 'has-card' : ''}" data-winner-card="${player.id}">
+      ${card ? `${escHtml(card.name)} (${card.points}p)` : 'Välj kort...'}
+    </button>
+  </div>`;
+}
+
 function renderLoserAssignments() {
   const section = $('#loser-section');
   const container = $('#loser-assignments');
@@ -501,7 +529,8 @@ function updateRoundPreview() {
 
   const losers = getActivePlayers().filter(id => id !== roundState.winnerId);
   const nekenCards = getNekenCards();
-  const allAssigned = losers.length > 0 && losers.every(id => !!roundState.loserCards[id]);
+  const allLoserAssigned = losers.length > 0 && losers.every(id => !!roundState.loserCards[id]);
+  const winnerCardAssigned = !!roundState.winnerCardId;
 
   let totalPoints = 0;
   losers.forEach(id => {
@@ -519,17 +548,18 @@ function updateRoundPreview() {
 
   preview.style.display = '';
   scoreEl.textContent = `+${totalPoints}`;
-  confirmBtn.disabled = !allAssigned;
+  confirmBtn.disabled = !(allLoserAssigned && winnerCardAssigned);
 }
 
 function confirmRound() {
-  if (!roundState.winnerId) return;
+  if (!roundState.winnerId || !roundState.winnerCardId) return;
   const losers = getActivePlayers().filter(id => id !== roundState.winnerId);
   const nekenCards = getNekenCards();
   if (!losers.every(id => !!roundState.loserCards[id])) return;
 
   const roundData = {
     winnerId: roundState.winnerId,
+    winnerCardId: roundState.winnerCardId,
     standByIds: [...roundState.standByIds],
     losers: losers.map(id => {
       if (roundState.nekenIds.has(id)) {
@@ -590,7 +620,12 @@ function closeCardPicker(skipAnimation = false) {
 }
 
 function selectCard(cardId) {
-  if (cardPickerTarget) {
+  if (cardPickerTarget === '__winner__') {
+    roundState.winnerCardId = cardId;
+    closeCardPicker();
+    renderWinnerCardAssignment();
+    updateRoundPreview();
+  } else if (cardPickerTarget) {
     roundState.loserCards[cardPickerTarget] = cardId;
     closeCardPicker();
     renderLoserAssignments();
@@ -759,9 +794,11 @@ function viewGame(gameId) {
       }
       if (s.isWinner) {
         const winnerClass = s.hadNeken ? 'protocol-cell__round--winner protocol-cell__round--winner-neken' : 'protocol-cell__round--winner';
+        const winnerCard = s.cardId ? getCardById(s.cardId) : null;
         return `<td><div class="protocol-cell">
           <span class="protocol-cell__round ${winnerClass}">+${s.roundScore}</span>
           <span class="protocol-cell__total">${formatScore(s.runningTotal)}</span>
+          ${winnerCard ? `<span class="protocol-cell__card protocol-cell__card--winner">${escHtml(winnerCard.name)}</span>` : ''}
         </div></td>`;
       }
       const card = s.cardId ? getCardById(s.cardId) : null;
@@ -884,6 +921,7 @@ function renderPlayerDetail(playerId) {
 
   const detail = $('#player-detail-content');
   const commonCard = getMostCommonCard(ps);
+  const commonWinnerCard = getMostCommonWinnerCard(ps);
   const avgScore = ps.avgScorePerRound;
   const avgClass = avgScore > 0 ? 'positive' : avgScore < 0 ? 'negative' : '';
 
@@ -905,13 +943,13 @@ function renderPlayerDetail(playerId) {
       </div>`;
   }
 
-  // Card frequency
+  // Card frequency (loser)
   let cardHtml = '';
   const cardEntries = Object.entries(ps.cardFrequency).sort((a, b) => b[1] - a[1]).slice(0, 8);
   if (cardEntries.length > 0) {
     const maxCount = cardEntries[0][1];
     cardHtml = `
-      <h3 class="stats-section-title">Vanligaste kort</h3>
+      <h3 class="stats-section-title">Vanligaste kort (förlorare)</h3>
       <div class="card-freq-list">
         ${cardEntries.map(([cardId, count]) => {
           const card = getCardById(cardId);
@@ -920,6 +958,27 @@ function renderPlayerDetail(playerId) {
           return `<div class="card-freq-item">
             <span class="card-freq-name">${escHtml(card.name)}</span>
             <div class="card-freq-bar-wrap"><div class="card-freq-bar" style="width: ${pct}%"></div></div>
+            <span class="card-freq-count">${count}</span>
+          </div>`;
+        }).join('')}
+      </div>`;
+  }
+
+  // Winner card frequency
+  let winnerCardHtml = '';
+  const winnerCardEntries = Object.entries(ps.winnerCardFrequency).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  if (winnerCardEntries.length > 0) {
+    const maxCount = winnerCardEntries[0][1];
+    winnerCardHtml = `
+      <h3 class="stats-section-title">Vanligaste vinnarkort</h3>
+      <div class="card-freq-list">
+        ${winnerCardEntries.map(([cardId, count]) => {
+          const card = getCardById(cardId);
+          if (!card) return '';
+          const pct = Math.round(count / maxCount * 100);
+          return `<div class="card-freq-item">
+            <span class="card-freq-name">${escHtml(card.name)} <span style="color:var(--text-muted);font-size:0.75rem">${card.points}p</span></span>
+            <div class="card-freq-bar-wrap"><div class="card-freq-bar card-freq-bar--winner" style="width: ${pct}%"></div></div>
             <span class="card-freq-count">${count}</span>
           </div>`;
         }).join('')}
@@ -1004,12 +1063,17 @@ function renderPlayerDetail(playerId) {
         <div class="stat-card__label">Vanligaste kort</div>
       </div>
       <div class="stat-card">
+        <div class="stat-card__value">${commonWinnerCard ? escHtml(commonWinnerCard.card.name) : '—'}</div>
+        <div class="stat-card__label">Vanligaste vinnarkort</div>
+      </div>
+      <div class="stat-card">
         <div class="stat-card__value">${streakText}</div>
         <div class="stat-card__label">Streak</div>
       </div>
     </div>
 
     ${chartHtml}
+    ${winnerCardHtml}
     ${cardHtml}
     ${h2hHtml}
   `;
@@ -1080,8 +1144,28 @@ function renderCardStats() {
       </table>
     </div>`;
 
+  // Winner cards section
+  const winnerCards = Object.values(cachedStats.cards)
+    .filter(c => c.timesWon > 0)
+    .sort((a, b) => b.timesWon - a.timesWon)
+    .slice(0, 20);
+  const maxWon = winnerCards.length > 0 ? Math.max(...winnerCards.map(c => c.timesWon)) : 1;
+
+  const winnerCardsHtml = winnerCards.length > 0 ? `
+    <h3 class="stats-section-title">Mest vinnande kort</h3>
+    <div class="card-freq-list">
+      ${winnerCards.map(c => {
+        const pct = Math.round(c.timesWon / maxWon * 100);
+        return `<div class="card-freq-item">
+          <span class="card-freq-name">${escHtml(c.name)} <span style="color:var(--text-muted);font-size:0.75rem">${c.points}p</span></span>
+          <div class="card-freq-bar-wrap"><div class="card-freq-bar card-freq-bar--winner" style="width: ${pct}%"></div></div>
+          <span class="card-freq-count">${c.timesWon}</span>
+        </div>`;
+      }).join('')}
+    </div>` : '';
+
   container.innerHTML = `
-    <h3 class="stats-section-title">Mest spelade kort</h3>
+    <h3 class="stats-section-title">Mest spelade kort (förlorare)</h3>
     <div class="card-freq-list">
       ${topCards.map(c => {
         const pct = Math.round(c.timesPlayed / maxPlayed * 100);
@@ -1092,6 +1176,8 @@ function renderCardStats() {
         </div>`;
       }).join('')}
     </div>
+
+    ${winnerCardsHtml}
 
     ${heatmapHtml}
   `;
@@ -1303,6 +1389,17 @@ function bindEvents() {
   $('#winner-grid').addEventListener('click', (e) => {
     const btn = e.target.closest('.winner-btn');
     if (btn) selectWinner(btn.dataset.id);
+  });
+
+  // Winner card assignment
+  $('#winner-card-assignment').addEventListener('click', (e) => {
+    const cardBtn = e.target.closest('.loser-row__card-btn');
+    if (cardBtn) {
+      cardPickerTarget = '__winner__';
+      const player = PlayerStore.get(roundState.winnerId);
+      $('#card-picker-title').textContent = `Välj kort för ${player?.name || '?'}`;
+      $('#card-picker-overlay').classList.add('active');
+    }
   });
 
   // Loser card assignment

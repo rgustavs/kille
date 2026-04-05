@@ -34,6 +34,7 @@ export function computeAdvancedStats(games, players) {
       nekenAsWinner: 0,  // times this player won when someone had neken
       biggestWin: null,   // highest single round win
       cardFrequency: {},  // cardId -> count (as loser)
+      winnerCardFrequency: {},  // cardId -> count (as winner)
       scoreHistory: [],   // array of game totals over time
       currentStreak: { type: null, count: 0 }, // win/loss streak
       avgScorePerRound: 0,
@@ -52,7 +53,9 @@ export function computeAdvancedStats(games, players) {
       type: c.type,
       timesPlayed: 0,
       timesWithNeken: 0,
-      playerFrequency: {}, // playerId -> count
+      timesWon: 0,          // times this card was played by a winner
+      playerFrequency: {},   // playerId -> count (as loser)
+      winnerFrequency: {},   // playerId -> count (as winner)
     };
   });
 
@@ -125,6 +128,18 @@ export function computeAdvancedStats(games, players) {
         }
         if (round.losers.some(l => l.neken)) {
           ps.nekenAsWinner++;
+        }
+
+        // Winner card frequency
+        if (round.winnerCardId) {
+          ps.winnerCardFrequency[round.winnerCardId] = (ps.winnerCardFrequency[round.winnerCardId] || 0) + 1;
+
+          // Global card stats for winner cards
+          if (cardStats[round.winnerCardId]) {
+            cardStats[round.winnerCardId].timesWon++;
+            cardStats[round.winnerCardId].winnerFrequency[round.winnerId] =
+              (cardStats[round.winnerCardId].winnerFrequency[round.winnerId] || 0) + 1;
+          }
         }
       }
 
@@ -267,6 +282,18 @@ function computeRecords(playerStats, players) {
   });
 
   return records;
+}
+
+/**
+ * Get the most frequently won-with card for a player.
+ */
+export function getMostCommonWinnerCard(playerStat) {
+  const entries = Object.entries(playerStat.winnerCardFrequency);
+  if (entries.length === 0) return null;
+  entries.sort((a, b) => b[1] - a[1]);
+  const [cardId, count] = entries[0];
+  const card = getCardById(cardId);
+  return card ? { card, count } : null;
 }
 
 /**
