@@ -319,11 +319,11 @@ export function getTopCards(cardStats, n = 5) {
 }
 
 /**
- * Get player leaderboard sorted by total score.
+ * Get player leaderboard sorted by win percentage (gameWinRate), then by gamesPlayed as tiebreaker.
  */
 export function getLeaderboard(playerStats) {
   return Object.entries(playerStats)
     .filter(([_, ps]) => ps.gamesPlayed > 0)
-    .sort((a, b) => b[1].totalScore - a[1].totalScore)
+    .sort((a, b) => b[1].gameWinRate - a[1].gameWinRate || b[1].gamesPlayed - a[1].gamesPlayed)
     .map(([id, ps], rank) => ({ id, rank: rank + 1, ...ps }));
 }
