@@ -38,6 +38,7 @@ let cardPickerCallback = null;
 // Stats
 let selectedStatsPlayerId = null;
 let cachedStats = null;
+let heatmapMode = 'loser'; // 'loser' | 'winner'
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DOM REFERENCES
@@ -883,7 +884,7 @@ function renderLeaderboard() {
       <div class="leaderboard-rank">${p.rank}</div>
       <div class="leaderboard-avatar">${p.name.charAt(0).toUpperCase()}</div>
       <div class="leaderboard-info">
-        <div class="leaderboard-name">${escHtml(p.name)}</div>
+        <button class="leaderboard-name-btn" data-player-goto="${escHtml(p.id)}">${escHtml(p.name)}</button>
         <div class="leaderboard-meta">${p.gamesPlayed} spel &middot; ${p.roundsWon} v/${p.roundsPlayed} r &middot; ${p.gameWinRate}% vinstprocent</div>
       </div>
       <div class="leaderboard-score ${scoreClass}">${p.totalScore > 0 ? '+' : ''}${p.totalScore}</div>
@@ -1090,10 +1091,18 @@ function renderCardStats() {
 
   const maxPlayed = Math.max(...topCards.map(c => c.timesPlayed));
 
-  // Collect players who appear in any card's playerFrequency, sorted by total losses desc
+  // Collect all cards for heatmap (both loser and winner)
+  const allHeatmapCards = Object.values(cachedStats.cards)
+    .filter(c => c.timesPlayed > 0 || c.timesWon > 0)
+    .sort((a, b) => b.points - a.points || b.timesPlayed - a.timesPlayed)
+    .slice(0, 20);
+
+  const freqKey = heatmapMode === 'winner' ? 'winnerFrequency' : 'playerFrequency';
+  const heatmapCards = allHeatmapCards.filter(c => Object.keys(c[freqKey]).length > 0 || (heatmapMode === 'loser' ? c.timesPlayed > 0 : c.timesWon > 0));
+
   const playerTotals = {};
-  topCards.forEach(c => {
-    Object.entries(c.playerFrequency).forEach(([pid, cnt]) => {
+  heatmapCards.forEach(c => {
+    Object.entries(c[freqKey]).forEach(([pid, cnt]) => {
       playerTotals[pid] = (playerTotals[pid] || 0) + cnt;
     });
   });
@@ -1103,13 +1112,19 @@ function renderCardStats() {
 
   // Global max cell value for color scaling
   const globalMax = heatmapPlayers.length > 0
-    ? Math.max(...topCards.flatMap(c => heatmapPlayers.map(p => c.playerFrequency[p.id] || 0)))
+    ? Math.max(...heatmapCards.flatMap(c => heatmapPlayers.map(p => c[freqKey][p.id] || 0)), 1)
     : 1;
 
   function heatColor(val) {
     if (val === 0) return null;
-    const t = val / globalMax; // 0..1
-    // interpolate cream-200 → green-700
+    const t = val / globalMax;
+    if (heatmapMode === 'winner') {
+      // blue tones for winner
+      const r = Math.round(235 - t * (235 - 30));
+      const g = Math.round(235 - t * (235 - 100));
+      const b = Math.round(245 - t * (245 - 220));
+      return `rgb(${r},${g},${b})`;
+    }
     const r = Math.round(245 - t * (245 - 26));
     const g = Math.round(239 - t * (239 - 77));
     const b = Math.round(224 - t * (224 - 46));
@@ -1117,7 +1132,13 @@ function renderCardStats() {
   }
 
   const heatmapHtml = `
-    <h3 class="stats-section-title">Heatmap — spelare vs kort</h3>
+    <div class="heatmap-header">
+      <h3 class="stats-section-title">Heatmap — spelare vs kort</h3>
+      <div class="heatmap-filter">
+        <button class="heatmap-filter-btn ${heatmapMode === 'loser' ? 'active' : ''}" data-heatmap-mode="loser">Sista kort</button>
+        <button class="heatmap-filter-btn ${heatmapMode === 'winner' ? 'active' : ''}" data-heatmap-mode="winner">Vinnarkort</button>
+      </div>
+    </div>
     <div class="heatmap-wrap">
       <table class="heatmap-table">
         <thead>
@@ -1128,12 +1149,12 @@ function renderCardStats() {
           </tr>
         </thead>
         <tbody>
-          ${topCards.map(c => {
+          ${heatmapCards.map(c => {
             return `<tr>
               <td class="hm-card-label">${escHtml(c.name)}</td>
               <td class="hm-card-pts">${c.points}</td>
               ${heatmapPlayers.map(p => {
-                const v = c.playerFrequency[p.id] || 0;
+                const v = c[freqKey][p.id] || 0;
                 const bg = heatColor(v);
                 const style = bg ? `background:${bg};color:#fff` : '';
                 return `<td class="heatmap-cell" data-v="${v}" style="${style}">${v || ''}</td>`;
@@ -1147,7 +1168,7 @@ function renderCardStats() {
   // Winner cards section
   const winnerCards = Object.values(cachedStats.cards)
     .filter(c => c.timesWon > 0)
-    .sort((a, b) => b.timesWon - a.timesWon)
+    .sort((a, b) => b.points - a.points || b.timesWon - a.timesWon)
     .slice(0, 20);
   const maxWon = winnerCards.length > 0 ? Math.max(...winnerCards.map(c => c.timesWon)) : 1;
 
@@ -1188,32 +1209,35 @@ function renderRecords() {
   const r = cachedStats.records;
 
   const items = [
-    { icon: '🏆', title: 'Flest vunna spel', holder: r.mostGamesWon, format: v => `${v.count} spel` },
-    { icon: '⚜', title: 'Flest vunna rundor', holder: r.mostRoundsWon, format: v => `${v.count} rundor` },
-    { icon: '🎮', title: 'Flest spelade spel', holder: r.mostGamesPlayed, format: v => `${v.count} spel` },
-    { icon: '🔥', title: 'Bästa runda (poäng)', holder: r.highestRoundScore, format: v => `+${v.score}` },
-    { icon: '💀', title: 'Sämsta runda (poäng)', holder: r.lowestRoundScore, format: v => `${v.score}` },
-    { icon: '📈', title: 'Bästa spel (totalt)', holder: r.highestGameScore, format: v => `+${v.score}` },
-    { icon: '📉', title: 'Sämsta spel (totalt)', holder: r.lowestGameScore, format: v => `${v.score}` },
-    { icon: '😈', title: 'Flest neken', holder: r.mostNeken, format: v => `${v.count} gånger` },
-    { icon: '🔥', title: 'Längsta vinstsvit', holder: r.longestWinStreak, format: v => `${v.count} spel` },
-  ].filter(item => item.holder && (item.holder.count > 0 || item.holder.score !== undefined));
+    { icon: '🏆', title: 'Flest vunna spel', record: r.mostGamesWon, format: v => `${v} spel`, valueKey: 'count' },
+    { icon: '⚜', title: 'Flest vunna rundor', record: r.mostRoundsWon, format: v => `${v} rundor`, valueKey: 'count' },
+    { icon: '🎮', title: 'Flest spelade spel', record: r.mostGamesPlayed, format: v => `${v} spel`, valueKey: 'count' },
+    { icon: '🔥', title: 'Bästa runda (poäng)', record: r.highestRoundScore, format: v => `+${v}`, valueKey: 'score' },
+    { icon: '💀', title: 'Sämsta runda (poäng)', record: r.lowestRoundScore, format: v => `${v}`, valueKey: 'score' },
+    { icon: '📈', title: 'Bästa spel (totalt)', record: r.highestGameScore, format: v => `+${v}`, valueKey: 'score' },
+    { icon: '📉', title: 'Sämsta spel (totalt)', record: r.lowestGameScore, format: v => `${v}`, valueKey: 'score' },
+    { icon: '😈', title: 'Flest neken', record: r.mostNeken, format: v => `${v} gånger`, valueKey: 'count' },
+    { icon: '🔥', title: 'Längsta vinstsvit', record: r.longestWinStreak, format: v => `${v} spel`, valueKey: 'count' },
+  ].filter(item => item.record);
 
   if (items.length === 0) {
     container.innerHTML = '<div class="empty-state"><div class="empty-state__text">Inga rekord ännu.</div></div>';
     return;
   }
 
-  container.innerHTML = `<div class="records-list">${items.map(item => `
+  container.innerHTML = `<div class="records-list">${items.map(item => {
+    const names = item.record.holders.map(h => escHtml(h.name)).join(', ');
+    const formattedValue = item.format(item.record.value);
+    return `
     <div class="record-item">
       <div class="record-icon">${item.icon}</div>
       <div class="record-info">
         <div class="record-title">${item.title}</div>
-        <div class="record-holder">${escHtml(item.holder.name)}</div>
+        <div class="record-holder">${names}</div>
       </div>
-      <div class="record-value">${item.format(item.holder)}</div>
-    </div>
-  `).join('')}</div>`;
+      <div class="record-value">${formattedValue}</div>
+    </div>`;
+  }).join('')}</div>`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1445,6 +1469,22 @@ function bindEvents() {
     if (btn) {
       selectedStatsPlayerId = btn.dataset.playerStats;
       renderPlayerStats();
+    }
+  });
+
+  $('#leaderboard-content').addEventListener('click', (e) => {
+    const btn = e.target.closest('.leaderboard-name-btn');
+    if (btn) {
+      selectedStatsPlayerId = btn.dataset.playerGoto;
+      switchStatsTab('players');
+    }
+  });
+
+  $('#cards-content').addEventListener('click', (e) => {
+    const btn = e.target.closest('.heatmap-filter-btn');
+    if (btn) {
+      heatmapMode = btn.dataset.heatmapMode;
+      renderCardStats();
     }
   });
 

@@ -1562,6 +1562,24 @@ body {
   color: var(--text-primary);
 }
 
+.leaderboard-name-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--accent);
+  cursor: pointer;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: text-decoration-color 0.15s;
+}
+
+.leaderboard-name-btn:hover {
+  text-decoration-color: var(--accent);
+}
+
 .leaderboard-meta {
   font-size: 0.78rem;
   color: var(--text-muted);
@@ -1797,6 +1815,42 @@ body {
 .heatmap-cell[data-v="0"] {
   background: var(--cream-100);
   color: var(--cream-300);
+}
+
+.heatmap-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.heatmap-header .stats-section-title {
+  margin-bottom: 0;
+}
+
+.heatmap-filter {
+  display: flex;
+  gap: 4px;
+}
+
+.heatmap-filter-btn {
+  background: var(--cream-200);
+  border: 1px solid var(--cream-300);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.heatmap-filter-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
 }
 
 /* ─── Records list ───────────────────────────────────────────────────────── */
