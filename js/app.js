@@ -884,7 +884,7 @@ function renderLeaderboard() {
       <div class="leaderboard-avatar">${p.name.charAt(0).toUpperCase()}</div>
       <div class="leaderboard-info">
         <div class="leaderboard-name">${escHtml(p.name)}</div>
-        <div class="leaderboard-meta">${p.gamesPlayed} spel &middot; ${p.roundsWon} v/${p.roundsPlayed} r &middot; ${p.winRate}%</div>
+        <div class="leaderboard-meta">${p.gamesPlayed} spel &middot; ${p.roundsWon} v/${p.roundsPlayed} r &middot; ${p.gameWinRate}% vinstprocent</div>
       </div>
       <div class="leaderboard-score ${scoreClass}">${p.totalScore > 0 ? '+' : ''}${p.totalScore}</div>
     </div>`;
