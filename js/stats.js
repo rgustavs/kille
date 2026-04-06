@@ -248,37 +248,40 @@ function computeRecords(playerStats, players) {
     mostGamesPlayed: null,      // { playerId, count }
   };
 
+  function updateRecord(current, newEntry, value, isHigher) {
+    if (!current) return { holders: [newEntry], value };
+    if (value === current.value) {
+      return { holders: [...current.holders, newEntry], value: current.value };
+    }
+    if (isHigher ? value > current.value : value < current.value) {
+      return { holders: [newEntry], value };
+    }
+    return current;
+  }
+
   players.forEach(p => {
     const ps = playerStats[p.id];
     if (!ps || ps.gamesPlayed === 0) return;
 
-    if (ps.bestRoundScore !== null && (!records.highestRoundScore || ps.bestRoundScore > records.highestRoundScore.score)) {
-      records.highestRoundScore = { playerId: p.id, name: p.name, score: ps.bestRoundScore };
+    if (ps.bestRoundScore !== null) {
+      records.highestRoundScore = updateRecord(records.highestRoundScore, { playerId: p.id, name: p.name }, ps.bestRoundScore, true);
     }
-    if (ps.worstRoundScore !== null && (!records.lowestRoundScore || ps.worstRoundScore < records.lowestRoundScore.score)) {
-      records.lowestRoundScore = { playerId: p.id, name: p.name, score: ps.worstRoundScore };
+    if (ps.worstRoundScore !== null) {
+      records.lowestRoundScore = updateRecord(records.lowestRoundScore, { playerId: p.id, name: p.name }, ps.worstRoundScore, false);
     }
-    if (ps.bestGameScore !== null && (!records.highestGameScore || ps.bestGameScore > records.highestGameScore.score)) {
-      records.highestGameScore = { playerId: p.id, name: p.name, score: ps.bestGameScore };
+    if (ps.bestGameScore !== null) {
+      records.highestGameScore = updateRecord(records.highestGameScore, { playerId: p.id, name: p.name }, ps.bestGameScore, true);
     }
-    if (ps.worstGameScore !== null && (!records.lowestGameScore || ps.worstGameScore < records.lowestGameScore.score)) {
-      records.lowestGameScore = { playerId: p.id, name: p.name, score: ps.worstGameScore };
+    if (ps.worstGameScore !== null) {
+      records.lowestGameScore = updateRecord(records.lowestGameScore, { playerId: p.id, name: p.name }, ps.worstGameScore, false);
     }
-    if (!records.mostGamesWon || ps.gamesWon > records.mostGamesWon.count) {
-      records.mostGamesWon = { playerId: p.id, name: p.name, count: ps.gamesWon };
+    records.mostGamesWon = updateRecord(records.mostGamesWon, { playerId: p.id, name: p.name }, ps.gamesWon, true);
+    records.mostRoundsWon = updateRecord(records.mostRoundsWon, { playerId: p.id, name: p.name }, ps.roundsWon, true);
+    records.mostNeken = updateRecord(records.mostNeken, { playerId: p.id, name: p.name }, ps.nekenGiven, true);
+    if (ps.currentStreak.type === 'win') {
+      records.longestWinStreak = updateRecord(records.longestWinStreak, { playerId: p.id, name: p.name }, ps.currentStreak.count, true);
     }
-    if (!records.mostRoundsWon || ps.roundsWon > records.mostRoundsWon.count) {
-      records.mostRoundsWon = { playerId: p.id, name: p.name, count: ps.roundsWon };
-    }
-    if (!records.mostNeken || ps.nekenGiven > records.mostNeken.count) {
-      records.mostNeken = { playerId: p.id, name: p.name, count: ps.nekenGiven };
-    }
-    if (ps.currentStreak.type === 'win' && (!records.longestWinStreak || ps.currentStreak.count > records.longestWinStreak.count)) {
-      records.longestWinStreak = { playerId: p.id, name: p.name, count: ps.currentStreak.count };
-    }
-    if (!records.mostGamesPlayed || ps.gamesPlayed > records.mostGamesPlayed.count) {
-      records.mostGamesPlayed = { playerId: p.id, name: p.name, count: ps.gamesPlayed };
-    }
+    records.mostGamesPlayed = updateRecord(records.mostGamesPlayed, { playerId: p.id, name: p.name }, ps.gamesPlayed, true);
   });
 
   return records;
@@ -319,11 +322,11 @@ export function getTopCards(cardStats, n = 5) {
 }
 
 /**
- * Get player leaderboard sorted by win percentage (gameWinRate), then by gamesPlayed as tiebreaker.
+ * Get player leaderboard sorted by totalScore, then by gamesPlayed as tiebreaker.
  */
 export function getLeaderboard(playerStats) {
   return Object.entries(playerStats)
     .filter(([_, ps]) => ps.gamesPlayed > 0)
-    .sort((a, b) => b[1].gameWinRate - a[1].gameWinRate || b[1].gamesPlayed - a[1].gamesPlayed)
+    .sort((a, b) => b[1].totalScore - a[1].totalScore || b[1].gamesPlayed - a[1].gamesPlayed)
     .map(([id, ps], rank) => ({ id, rank: rank + 1, ...ps }));
 }
