@@ -2237,11 +2237,48 @@ body {
   border-radius: 12px;
 }
 
-.btn-icon {
-  width: 1.5em;
-  height: 1.5em;
-  border-radius: 4px;
+
+
+/* ─── Grid action cards for start page ─── */
+.home-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+.action-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  background: var(--cream-100);
+  border: 2px solid var(--cream-400);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+  cursor: pointer;
+  transition: transform var(--transition-fast), border-color var(--transition-fast);
+}
+
+.action-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--gold);
+}
+
+.action-card__img {
+  width: 100%;
+  max-width: 120px;
+  aspect-ratio: 1/1;
   object-fit: cover;
-  display: inline-block;
-  vertical-align: middle;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--cream-300);
+}
+
+.action-card__title {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text-main);
+  text-align: center;
 }

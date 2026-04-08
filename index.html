@@ -35,11 +35,25 @@
         <p class="home-hero__subtitle">Poängräknare för det klassiska kortspelet</p>
       </div>
       <div class="home-actions">
-        <button class="btn btn--primary btn--full" id="btn-new-game"><img src="assets/icons/new_game.jpg" alt="" class="btn-icon"> Nytt Spel</button>
-        <button class="btn btn--gold btn--full" id="btn-continue-game" style="display:none">▶ Fortsätt Spel</button>
-        <button class="btn btn--secondary btn--full" id="btn-history"><img src="assets/icons/history.jpg" alt="" class="btn-icon"> Historik</button>
-        <button class="btn btn--secondary btn--full" id="btn-stats"><img src="assets/icons/stats.jpg" alt="" class="btn-icon"> Statistik</button>
-        <button class="btn btn--ghost btn--full" id="btn-players"><img src="assets/icons/players.jpg" alt="" class="btn-icon"> Hantera Spelare</button>
+        <button class="btn btn--gold btn--full" id="btn-continue-game" style="display:none; margin-bottom: var(--space-md);">▶ Fortsätt Spel</button>
+        <div class="home-action-grid">
+          <button class="action-card" id="btn-new-game">
+            <img src="assets/icons/new_game.jpg" alt="" class="action-card__img">
+            <span class="action-card__title">Nytt Spel</span>
+          </button>
+          <button class="action-card" id="btn-history">
+            <img src="assets/icons/history.jpg" alt="" class="action-card__img">
+            <span class="action-card__title">Historik</span>
+          </button>
+          <button class="action-card" id="btn-stats">
+            <img src="assets/icons/stats.jpg" alt="" class="action-card__img">
+            <span class="action-card__title">Statistik</span>
+          </button>
+          <button class="action-card" id="btn-players">
+            <img src="assets/icons/players.jpg" alt="" class="action-card__img">
+            <span class="action-card__title">Hantera Spelare</span>
+          </button>
+        </div>
         <div class="home-data-actions">
           <button class="btn btn--ghost btn--half" id="btn-export">⬆ Exportera</button>
           <button class="btn btn--ghost btn--half" id="btn-import">⬇ Importera</button>
