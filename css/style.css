@@ -170,6 +170,10 @@ body {
   padding-bottom: calc(var(--space-2xl) + env(safe-area-inset-bottom, 0px));
 }
 
+.game-content-padded {
+  padding-bottom: calc(140px + env(safe-area-inset-bottom, 0px));
+}
+
 /* ─── Screen visibility ──────────────────────────────────────────────────── */
 .screen {
   display: none;
@@ -1333,40 +1337,293 @@ body {
 @media (max-width: 480px) {
   .app-content {
     padding: var(--space-md);
+    padding-bottom: calc(var(--space-lg) + env(safe-area-inset-bottom, 0px));
   }
 
+  /* ── Home: compact hero ── */
+  .home-hero {
+    padding: var(--space-md) 0 var(--space-sm);
+  }
+  .home-hero__icon {
+    font-size: 2.5rem;
+    margin-bottom: var(--space-xs);
+  }
   .home-hero__title {
-    font-size: 2.2rem;
+    font-size: 2rem;
+    margin-bottom: 0;
+  }
+  .home-hero__subtitle {
+    font-size: 0.85rem;
+  }
+  .home-actions {
+    margin-top: var(--space-md);
+    gap: var(--space-sm);
+  }
+  .home-actions .btn--primary {
+    font-size: 1rem;
+    padding: var(--space-sm) var(--space-md);
   }
 
+  /* ── Setup: compact player cards ── */
   .setup-grid {
     grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
     gap: var(--space-sm);
+    margin: var(--space-sm) 0;
   }
-
   .setup-player {
-    padding: var(--space-md) var(--space-sm);
+    padding: var(--space-sm) var(--space-xs);
+    gap: var(--space-xs);
   }
-
-  .protocol-table {
+  .setup-player__avatar {
+    width: 36px;
+    height: 36px;
+    font-size: 1rem;
+  }
+  .setup-player__name {
+    font-size: 0.8rem;
+  }
+  .setup-count {
+    margin-top: var(--space-xs);
     font-size: 0.8rem;
   }
 
+  /* ── Protocol table ── */
+  .protocol-table {
+    font-size: 0.8rem;
+  }
   .protocol-table th,
   .protocol-table td {
     padding: var(--space-xs) var(--space-sm);
   }
 
-  .card-picker__grid {
-    grid-template-columns: repeat(auto-fill, minmax(75px, 1fr));
-  }
-
-  .winner-grid {
-    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-  }
-
+  /* ── Modal: compact spacing ── */
   .modal {
     padding: var(--space-md);
+    padding-bottom: calc(var(--space-md) + env(safe-area-inset-bottom, 0px));
+  }
+  .modal__handle {
+    margin-bottom: var(--space-sm);
+  }
+  .modal__title {
+    font-size: 1.15rem;
+    margin-bottom: var(--space-sm);
+  }
+  .modal__section {
+    margin-bottom: var(--space-sm);
+  }
+  .modal__section-title {
+    font-size: 0.78rem;
+    margin-bottom: var(--space-xs);
+  }
+
+  /* ── Modal grids: compact ── */
+  .standby-toggle {
+    font-size: 0.78rem;
+    padding: var(--space-xs) var(--space-sm);
+    min-height: 36px;
+  }
+  .winner-grid {
+    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+    gap: var(--space-xs);
+  }
+  .winner-btn {
+    padding: var(--space-sm);
+    font-size: 0.8rem;
+    gap: 2px;
+  }
+  .winner-btn__icon {
+    font-size: 1.2rem;
+  }
+  .loser-row {
+    padding: var(--space-xs) var(--space-sm);
+    gap: var(--space-sm);
+  }
+  .loser-row__card-btn {
+    min-height: 40px;
+    font-size: 0.8rem;
+    min-width: 110px;
+  }
+  .loser-row__neken-btn {
+    font-size: 0.72rem;
+    min-height: 36px;
+    padding: var(--space-xs) var(--space-sm);
+  }
+  .round-preview {
+    padding: var(--space-sm);
+    margin-top: var(--space-sm);
+  }
+  .round-preview__winner {
+    font-size: 1.2rem;
+  }
+
+  /* ── Card picker: compact tiles ── */
+  .card-picker {
+    padding: var(--space-md);
+    padding-bottom: calc(var(--space-md) + env(safe-area-inset-bottom, 0px));
+  }
+  .card-picker__title {
+    font-size: 0.95rem;
+    margin-bottom: var(--space-sm);
+  }
+  .card-picker__group {
+    margin-bottom: var(--space-sm);
+  }
+  .card-picker__grid {
+    grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+    gap: var(--space-xs);
+  }
+  .card-tile {
+    padding: var(--space-xs);
+  }
+  .card-tile__image {
+    width: 40px;
+    height: 48px;
+  }
+  .card-tile__number {
+    width: 40px;
+    height: 48px;
+    font-size: 1.2rem;
+  }
+  .card-tile__name {
+    font-size: 0.65rem;
+  }
+  .card-tile__points {
+    font-size: 0.65rem;
+  }
+
+  /* ── Panels & empty states ── */
+  .panel {
+    padding: var(--space-md);
+  }
+  .panel__title {
+    font-size: 1rem;
+    margin-bottom: var(--space-sm);
+  }
+  .empty-state {
+    padding: var(--space-lg);
+  }
+  .empty-state__icon {
+    font-size: 2rem;
+    margin-bottom: var(--space-sm);
+  }
+  .empty-state__text {
+    font-size: 0.9rem;
+  }
+
+  /* ── Buttons: slightly more compact ── */
+  .btn {
+    min-height: 44px;
+  }
+  .btn--small {
+    min-height: 36px;
+  }
+
+  /* ── Player list ── */
+  .player-item {
+    padding: var(--space-xs) var(--space-sm);
+    gap: var(--space-sm);
+  }
+  .player-item__avatar {
+    width: 30px;
+    height: 30px;
+    font-size: 0.8rem;
+  }
+
+  /* ── History ── */
+  .history-item {
+    padding: var(--space-md);
+  }
+
+  /* ── Stats: compact ── */
+  .stats-tabs {
+    margin-bottom: var(--space-md);
+  }
+  .stats-tab {
+    font-size: 0.78rem;
+    padding: var(--space-xs);
+    min-height: 36px;
+  }
+  .stats-grid {
+    gap: var(--space-xs);
+    margin-bottom: var(--space-md);
+  }
+  .stat-card {
+    padding: var(--space-sm);
+  }
+  .stat-card__value {
+    font-size: 1.2rem;
+  }
+  .stat-card__label {
+    font-size: 0.7rem;
+  }
+  .leaderboard-item {
+    padding: var(--space-sm) var(--space-md);
+  }
+  .leaderboard-rank {
+    font-size: 1.1rem;
+  }
+  .leaderboard-avatar {
+    width: 34px;
+    height: 34px;
+    font-size: 0.95rem;
+  }
+  .player-detail-avatar {
+    width: 42px;
+    height: 42px;
+    font-size: 1.2rem;
+    margin-bottom: var(--space-xs);
+  }
+  .player-detail-name {
+    font-size: 1.1rem;
+  }
+  .player-detail-header {
+    margin-bottom: var(--space-md);
+  }
+  .stats-player-selector {
+    margin-bottom: var(--space-md);
+  }
+
+  /* ── Leaderboard overlay (game end) ── */
+  .leaderboard-content {
+    padding: var(--space-lg) var(--space-md);
+  }
+  .leaderboard-title {
+    font-size: 1.3rem;
+    margin-bottom: var(--space-md);
+  }
+  .podium {
+    min-height: 150px;
+    margin-bottom: var(--space-md);
+  }
+  .podium__place--1 .podium__bar {
+    height: 105px;
+  }
+  .podium__place--2 .podium__bar {
+    height: 75px;
+  }
+  .podium__place--3 .podium__bar {
+    height: 50px;
+  }
+  .podium__medal {
+    font-size: 1.4rem;
+  }
+  .podium__place--1 .podium__medal {
+    font-size: 1.8rem;
+  }
+  .podium__name {
+    font-size: 0.85rem;
+  }
+  .podium__place--1 .podium__name {
+    font-size: 0.95rem;
+  }
+
+  /* ── Game actions bar: compact ── */
+  .game-actions {
+    padding: var(--space-sm) var(--space-md);
+    padding-bottom: calc(var(--space-sm) + env(safe-area-inset-bottom, 0px));
+  }
+  .game-content-padded {
+    padding-bottom: calc(110px + env(safe-area-inset-bottom, 0px));
   }
 }
 
