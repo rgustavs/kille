@@ -2236,3 +2236,12 @@ body {
   padding: 2px 8px;
   border-radius: 12px;
 }
+
+.btn-icon {
+  width: 1.5em;
+  height: 1.5em;
+  border-radius: 4px;
+  object-fit: cover;
+  display: inline-block;
+  vertical-align: middle;
+}
