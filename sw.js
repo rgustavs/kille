@@ -10,7 +10,14 @@ self.addEventListener('install', (event) => {
         './js/app.js',
         './js/cards.js',
         './js/game.js',
-        './js/stats.js'
+        './js/importexport.js',
+        './js/stats.js',
+        './js/store.js',
+        './manifest.json',
+        './assets/icons/history.jpg',
+        './assets/icons/new_game.jpg',
+        './assets/icons/players.jpg',
+        './assets/icons/stats.jpg'
       ]);
     })
   );
@@ -31,6 +38,8 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+
   // We use Stale-while-revalidate strategy for the most robust PWA experience
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
@@ -46,8 +55,11 @@ self.addEventListener('fetch', (event) => {
           });
         }
         return networkResponse;
-      }).catch(() => {
-        // Fetch failed (offline) -> return offline fallback if needed, handled by returning cachedResponse
+      }).catch(async () => {
+        if (event.request.mode === 'navigate') {
+          return caches.match('./index.html');
+        }
+        return cachedResponse || new Response('', { status: 503, statusText: 'Offline' });
       });
 
       return cachedResponse || fetchPromise;

@@ -844,6 +844,7 @@ function renderStats() {
 
   emptyEl.style.display = 'none';
   tabsEl.style.display = '';
+  $$('.stats-panel').forEach(el => el.style.display = '');
 
   cachedStats = computeAdvancedStats(games, players);
 

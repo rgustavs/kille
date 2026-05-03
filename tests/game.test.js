@@ -10,6 +10,7 @@ import {
 
 function runTests() {
   console.log('Running game domain tests...');
+  let failures = 0;
 
   // Test: createGame
   try {
@@ -19,6 +20,7 @@ function runTests() {
     assert.strictEqual(game.rounds.length, 0);
     console.log('✅ createGame passes');
   } catch (err) {
+    failures++;
     console.error('❌ createGame failed', err);
   }
 
@@ -27,6 +29,7 @@ function runTests() {
     assert.throws(() => createGame(['p1']), /2-8/);
     console.log('✅ createGame validation passes');
   } catch (err) {
+    failures++;
     console.error('❌ createGame validation failed', err);
   }
 
@@ -52,6 +55,7 @@ function runTests() {
     assert.strictEqual(table.totals['p3'], 0);
     console.log('✅ addRound and calculateScoreTable passes');
   } catch (err) {
+    failures++;
     console.error('❌ addRound and calculateScoreTable failed', err);
   }
 
@@ -67,6 +71,7 @@ function runTests() {
     assert.strictEqual(game.rounds.length, 0);
     console.log('✅ removeLastRound passes');
   } catch (err) {
+    failures++;
     console.error('❌ removeLastRound failed', err);
   }
 
@@ -78,6 +83,7 @@ function runTests() {
     assert.ok(game.completedAt);
     console.log('✅ completeGame passes');
   } catch (err) {
+    failures++;
     console.error('❌ completeGame failed', err);
   }
 
@@ -98,7 +104,54 @@ function runTests() {
     assert.strictEqual(table.totals['p3'], -10);
     console.log('✅ Neken scoring passes');
   } catch (err) {
+    failures++;
     console.error('❌ Neken scoring failed', err);
+  }
+
+  // Test: invalid round data should fail loudly instead of scoring as zero
+  try {
+    const game = createGame(['p1', 'p2']);
+    assert.throws(() => addRound(game, {
+      winnerId: 'p1',
+      losers: [{ playerId: 'p2', cardId: 'missing_card', neken: false }]
+    }), /kort/);
+    assert.throws(() => addRound(game, {
+      winnerId: 'missing_player',
+      losers: [{ playerId: 'p2', cardId: 'num_2', neken: false }]
+    }), /Vinnaren/);
+    assert.throws(() => addRound(createGame(['p1', 'p2', 'p3']), {
+      winnerId: 'p1',
+      losers: [{ playerId: 'p2', cardId: 'num_2', neken: false }]
+    }), /Alla aktiva/);
+    assert.throws(() => addRound(game, {
+      winnerId: 'p1',
+      standByIds: ['p2'],
+      losers: [{ playerId: 'p2', cardId: 'num_2', neken: false }]
+    }), /förlorare/);
+    console.log('✅ addRound validation passes');
+  } catch (err) {
+    failures++;
+    console.error('❌ addRound validation failed', err);
+  }
+
+  // Test: score table tolerates legacy/incomplete rounds without crashing
+  try {
+    const table = calculateScoreTable({
+      playerIds: ['p1', 'p2'],
+      rounds: [{ roundNumber: 1, winnerId: 'p1', winnerScore: 0 }]
+    });
+    assert.strictEqual(table.totals.p1, 0);
+    assert.strictEqual(table.totals.p2, 0);
+    console.log('✅ calculateScoreTable legacy tolerance passes');
+  } catch (err) {
+    failures++;
+    console.error('❌ calculateScoreTable legacy tolerance failed', err);
+  }
+
+  if (failures > 0) {
+    console.error(`${failures} test group(s) failed.`);
+    process.exitCode = 1;
+    return;
   }
 
   console.log('All tests completed.');

@@ -11,16 +11,22 @@ export function uid() {
 // ─── Player Store ───────────────────────────────────────────────────────────
 const PLAYERS_KEY = 'kille_players';
 
+function readJsonArray(key) {
+  if (typeof localStorage === 'undefined') return [];
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || '[]');
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+}
+
 export const PlayerStore = {
   _cache: null,
 
   getAll() {
     if (!this._cache) {
-      if (typeof localStorage !== 'undefined') {
-        this._cache = JSON.parse(localStorage.getItem(PLAYERS_KEY) || '[]');
-      } else {
-        this._cache = [];
-      }
+      this._cache = readJsonArray(PLAYERS_KEY);
     }
     return this._cache;
   },
@@ -36,8 +42,12 @@ export const PlayerStore = {
   },
 
   add(name) {
+    const trimmedName = String(name || '').trim();
+    if (!trimmedName) {
+      throw new Error('Spelarnamn saknas');
+    }
     const players = this.getAll();
-    const player = { id: uid(), name: name.trim(), createdAt: new Date().toISOString() };
+    const player = { id: uid(), name: trimmedName, createdAt: new Date().toISOString() };
     players.push(player);
     this._save();
     return player;
@@ -49,9 +59,11 @@ export const PlayerStore = {
   },
 
   rename(id, newName) {
+    const trimmedName = String(newName || '').trim();
+    if (!trimmedName) return;
     const player = this.get(id);
     if (player) {
-      player.name = newName.trim();
+      player.name = trimmedName;
       this._save();
     }
   }
@@ -66,11 +78,7 @@ export const GameStore = {
 
   getAll() {
     if (!this._cache) {
-      if (typeof localStorage !== 'undefined') {
-        this._cache = JSON.parse(localStorage.getItem(GAMES_KEY) || '[]');
-      } else {
-        this._cache = [];
-      }
+      this._cache = readJsonArray(GAMES_KEY);
     }
     return this._cache;
   },
@@ -125,6 +133,9 @@ export const GameStore = {
 
   getActive() {
     const id = this.getActiveId();
-    return id ? this.get(id) : null;
+    const game = id ? this.get(id) : null;
+    if (game && game.status === 'active') return game;
+    if (id) this.clearActive();
+    return null;
   }
 };

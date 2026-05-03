@@ -3,6 +3,7 @@
  * Handles serialisation of all player and game data to/from JSON files.
  */
 import { PlayerStore, GameStore } from './store.js';
+import { getCardById } from './cards.js';
 
 const FORMAT_VERSION = '1.0';
 
@@ -64,6 +65,7 @@ export function importData(jsonString) {
   if (!payload.version || !Array.isArray(payload.players) || !Array.isArray(payload.games)) {
     throw new Error('Ogiltig filformat — saknar version, spelare eller spel');
   }
+  validateImportPayload(payload);
 
   const existingPlayers = PlayerStore.getAll();
   const existingGameIds = new Set(GameStore.getAll().map(g => g.id));
@@ -130,4 +132,43 @@ function remapGameIds(game, idMap) {
       losers: round.losers.map(l => ({ ...l, playerId: map(l.playerId) }))
     }))
   };
+}
+
+function validateImportPayload(payload) {
+  const importedPlayerIds = new Set();
+  payload.players.forEach(player => {
+    if (!player || typeof player.id !== 'string' || typeof player.name !== 'string' || !player.name.trim()) {
+      throw new Error('Ogiltig spelare i importfilen');
+    }
+    importedPlayerIds.add(player.id);
+  });
+
+  payload.games.forEach(game => {
+    if (!game || typeof game.id !== 'string' || !Array.isArray(game.playerIds) || !Array.isArray(game.rounds)) {
+      throw new Error('Ogiltigt spel i importfilen');
+    }
+    if (game.playerIds.some(id => !importedPlayerIds.has(id))) {
+      throw new Error('Spelet refererar till okänd spelare');
+    }
+    const gamePlayerIds = new Set(game.playerIds);
+    game.rounds.forEach(round => {
+      if (!round || typeof round.winnerId !== 'string' || !Array.isArray(round.standByIds) || !Array.isArray(round.losers)) {
+        throw new Error('Ogiltig omgång i importfilen');
+      }
+      if (!gamePlayerIds.has(round.winnerId) || round.standByIds.some(id => !gamePlayerIds.has(id))) {
+        throw new Error('Omgången refererar till okänd spelare');
+      }
+      if (round.winnerCardId && !getCardById(round.winnerCardId)) {
+        throw new Error('Omgången refererar till okänt kort');
+      }
+      round.losers.forEach(loser => {
+        if (!loser || typeof loser.playerId !== 'string' || typeof loser.cardId !== 'string') {
+          throw new Error('Ogiltig förlorare i importfilen');
+        }
+        if (!gamePlayerIds.has(loser.playerId) || !getCardById(loser.cardId)) {
+          throw new Error('Omgången refererar till okänd spelare eller okänt kort');
+        }
+      });
+    });
+  });
 }
