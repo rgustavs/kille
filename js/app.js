@@ -79,7 +79,8 @@ function updateHeader(screenId) {
     game: 'Protokoll',
     history: 'Historik',
     'view-game': 'Spelprotokoll',
-    stats: 'Statistik'
+    stats: 'Statistik',
+    cards: 'Kortvärden'
   };
   $('#header-title').textContent = titles[screenId] || 'Kille';
   const backBtn = $('#btn-back');
@@ -100,6 +101,7 @@ function renderScreen(screenId) {
     case 'game': renderGame(); break;
     case 'history': renderHistory(); break;
     case 'stats': renderStats(); break;
+    case 'cards': renderCardValues(); break;
     case 'view-game': break; // rendered when entering
   }
 }
@@ -574,6 +576,48 @@ function confirmRound() {
   GameStore.save(activeGame);
   closeRoundModal();
   renderGame();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CARD VALUES
+// ═══════════════════════════════════════════════════════════════════════════
+const CARD_TYPE_LABELS = {
+  picture: 'Bildkort',
+  number: 'Sifferkort (Lilja)',
+  zero: 'Nollkort'
+};
+
+function cardVisual(card, modifier) {
+  if (card.image) {
+    return `<img class="cv-visual${modifier}" src="${card.image}" alt="${escHtml(card.name)}" loading="lazy">`;
+  }
+  if (card.type === 'number') {
+    return `<div class="cv-visual${modifier} cv-visual--number">${card.number}</div>`;
+  }
+  return `<div class="cv-visual${modifier} cv-visual--number">${escHtml(card.name)}</div>`;
+}
+
+function renderCardValues() {
+  const sorted = [...CARDS].sort((a, b) => b.points - a.points);
+
+  $('#card-values-overview').innerHTML = sorted.map(c => `
+    <div class="cv-tile">
+      ${cardVisual(c, '--small')}
+      <span class="cv-tile__name">${escHtml(c.name)}</span>
+      <span class="cv-tile__points">${c.points} p</span>
+    </div>
+  `).join('');
+
+  $('#card-values-detail').innerHTML = sorted.map(c => `
+    <div class="cv-detail">
+      ${cardVisual(c, '--large')}
+      <div class="cv-detail__info">
+        <div class="cv-detail__name">${escHtml(c.name)}</div>
+        <div class="cv-detail__type">${CARD_TYPE_LABELS[c.type] || ''}</div>
+      </div>
+      <div class="cv-detail__points">${c.points}<span class="cv-detail__points-unit">p</span></div>
+    </div>
+  `).join('');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1373,6 +1417,7 @@ function bindEvents() {
   });
   $('#btn-history').addEventListener('click', () => navigateTo('history'));
   $('#btn-stats').addEventListener('click', () => navigateTo('stats'));
+  $('#btn-card-values').addEventListener('click', () => navigateTo('cards'));
   $('#btn-export').addEventListener('click', handleExport);
   $('#btn-import').addEventListener('click', handleImport);
   $('#input-import-file').addEventListener('change', e => handleImportFile(e.target.files[0]));
