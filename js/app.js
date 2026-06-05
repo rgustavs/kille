@@ -618,6 +618,29 @@ function renderCardValues() {
       <div class="cv-detail__points">${c.points}<span class="cv-detail__points-unit">p</span></div>
     </div>
   `).join('');
+
+  renderCardValuesPrint();
+}
+
+/** Build the printable / PDF reference sheet, grouped by card type. */
+function renderCardValuesPrint() {
+  const groups = ['picture', 'number', 'zero'];
+  $('#card-values-print-groups').innerHTML = groups.map(type => {
+    const cards = getCardsByType(type).sort((a, b) => b.points - a.points);
+    if (!cards.length) return '';
+    const rows = cards.map(c => `
+      <div class="cv-print__card">
+        <span class="cv-print__card-name">${escHtml(c.name)}</span>
+        <span class="cv-print__card-points">${c.points} p</span>
+      </div>
+    `).join('');
+    return `
+      <div class="cv-print__group">
+        <h2 class="cv-print__group-title">${CARD_TYPE_LABELS[type] || ''}</h2>
+        <div class="cv-print__cards">${rows}</div>
+      </div>
+    `;
+  }).join('');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1418,6 +1441,7 @@ function bindEvents() {
   $('#btn-history').addEventListener('click', () => navigateTo('history'));
   $('#btn-stats').addEventListener('click', () => navigateTo('stats'));
   $('#btn-card-values').addEventListener('click', () => navigateTo('cards'));
+  $('#btn-print-cards').addEventListener('click', () => window.print());
   $('#btn-export').addEventListener('click', handleExport);
   $('#btn-import').addEventListener('click', handleImport);
   $('#input-import-file').addEventListener('change', e => handleImportFile(e.target.files[0]));

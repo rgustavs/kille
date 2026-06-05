@@ -183,6 +183,7 @@
     <!-- ── Card Values ── -->
     <section class="screen app-content" id="screen-cards">
       <p class="card-values__intro">Alla kort i Kille och deras poängvärde. Sifferkorten (liljor) är värda talet × 5.</p>
+      <button class="btn btn--ghost btn--full mb-lg" id="btn-print-cards">⎙ Skriv ut / Spara som PDF</button>
       <div class="card-values__overview" id="card-values-overview"></div>
       <h3 class="card-values__heading">Alla kort i detalj</h3>
       <div class="card-values__detail" id="card-values-detail"></div>
@@ -279,6 +280,16 @@
         <button class="btn btn--danger" id="confirm-yes">Bekräfta</button>
       </div>
     </div>
+  </div>
+
+  <!-- ══════ Printable Card Values Sheet (PDF) ══════ -->
+  <div class="cv-print" id="card-values-print" aria-hidden="true">
+    <div class="cv-print__header">
+      <span class="cv-print__crest">⚜</span>
+      <h1 class="cv-print__title">Kille — Kortvärden</h1>
+      <p class="cv-print__subtitle">Sifferkorten (liljor) är värda talet × 5</p>
+    </div>
+    <div class="cv-print__groups" id="card-values-print-groups"></div>
   </div>
 
   <script type="module" src="js/app.js"></script>
