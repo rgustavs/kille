@@ -5,7 +5,8 @@
 import { CARDS, getCardById, getCardsByType } from './cards.js';
 import { PlayerStore, GameStore } from './store.js';
 import {
-  createGame, addRound, removeLastRound, completeGame, calculateScoreTable
+  createGame, addRound, removeLastRound, completeGame, calculateScoreTable,
+  NEKEN_PENALTY, LOW_STAKE_THRESHOLD
 } from './game.js';
 import { computeAdvancedStats, getMostCommonCard, getMostCommonWinnerCard, getTopCards, getLeaderboard } from './stats.js';
 import { downloadExport, importFile } from './importexport.js';
@@ -219,6 +220,54 @@ function startGame() {
 // ═══════════════════════════════════════════════════════════════════════════
 // ACTIVE GAME — PROTOCOL TABLE
 // ═══════════════════════════════════════════════════════════════════════════
+
+/** Build the <tbody> HTML for a protocol table (newest round first). */
+function buildProtocolBody(table, players) {
+  const reversedRounds = [...table.rounds].reverse();
+  return reversedRounds.map(round => {
+    const isVoid = round.counted === false;
+    const cells = players.map(p => {
+      const s = round.scores[p.id];
+      if (s.isStandBy) {
+        return `<td><div class="protocol-cell">
+          <span class="protocol-cell__round protocol-cell__round--standby">—</span>
+          <span class="protocol-cell__total">${formatScore(s.runningTotal)}</span>
+        </div></td>`;
+      }
+      if (s.isWinner) {
+        const winnerClass = s.hadNeken ? 'protocol-cell__round--winner protocol-cell__round--winner-neken' : 'protocol-cell__round--winner';
+        const winnerCard = s.cardId ? getCardById(s.cardId) : null;
+        return `<td><div class="protocol-cell">
+          <span class="protocol-cell__round ${winnerClass}">+${s.roundScore}</span>
+          <span class="protocol-cell__total">${formatScore(s.runningTotal)}</span>
+          ${winnerCard ? `<span class="protocol-cell__card protocol-cell__card--winner">${escHtml(winnerCard.name)}</span>` : ''}
+        </div></td>`;
+      }
+      const card = s.cardId ? getCardById(s.cardId) : null;
+      return `<td><div class="protocol-cell">
+        <span class="protocol-cell__round protocol-cell__round--loser">${s.roundScore}</span>
+        <span class="protocol-cell__total">${formatScore(s.runningTotal)}</span>
+        ${card ? `<span class="protocol-cell__card">${escHtml(card.name)}${s.neken ? ' nek' : ''}</span>` : ''}
+      </div></td>`;
+    }).join('');
+    const rowClass = isVoid ? ' class="protocol-row--void"' : '';
+    const marker = isVoid ? '<span class="protocol-void-badge" title="Räknas inte i ställningen">ej räknad</span>' : '';
+    return `<tr${rowClass}><td>${round.roundNumber}${marker}</td>${cells}</tr>`;
+  }).join('');
+}
+
+/** Build the <tfoot> totals row for a protocol table. */
+function buildProtocolFoot(table, players) {
+  return `<tr>
+    <td>Σ</td>
+    ${players.map(p => {
+      const total = table.totals[p.id] || 0;
+      const cls = total > 0 ? 'total-positive' : total < 0 ? 'total-negative' : 'total-zero';
+      return `<td class="${cls}">${formatScore(total)}</td>`;
+    }).join('')}
+  </tr>`;
+}
+
 function renderGame() {
   if (!activeGame) return;
 
@@ -246,44 +295,10 @@ function renderGame() {
   </tr>`;
 
   // Body (newest round at top)
-  const reversedRounds = [...table.rounds].reverse();
-  $('#protocol-body').innerHTML = reversedRounds.map(round => {
-    const cells = players.map(p => {
-      const s = round.scores[p.id];
-      if (s.isStandBy) {
-        return `<td><div class="protocol-cell">
-          <span class="protocol-cell__round protocol-cell__round--standby">—</span>
-          <span class="protocol-cell__total">${formatScore(s.runningTotal)}</span>
-        </div></td>`;
-      }
-      if (s.isWinner) {
-        const winnerClass = s.hadNeken ? 'protocol-cell__round--winner protocol-cell__round--winner-neken' : 'protocol-cell__round--winner';
-        const winnerCard = s.cardId ? getCardById(s.cardId) : null;
-        return `<td><div class="protocol-cell">
-          <span class="protocol-cell__round ${winnerClass}">+${s.roundScore}</span>
-          <span class="protocol-cell__total">${formatScore(s.runningTotal)}</span>
-          ${winnerCard ? `<span class="protocol-cell__card protocol-cell__card--winner">${escHtml(winnerCard.name)}</span>` : ''}
-        </div></td>`;
-      }
-      const card = s.cardId ? getCardById(s.cardId) : null;
-      return `<td><div class="protocol-cell">
-        <span class="protocol-cell__round protocol-cell__round--loser">${s.roundScore}</span>
-        <span class="protocol-cell__total">${formatScore(s.runningTotal)}</span>
-        ${card ? `<span class="protocol-cell__card">${escHtml(card.name)}${s.neken ? ' ×2' : ''}</span>` : ''}
-      </div></td>`;
-    }).join('');
-    return `<tr><td>${round.roundNumber}</td>${cells}</tr>`;
-  }).join('');
+  $('#protocol-body').innerHTML = buildProtocolBody(table, players);
 
   // Footer (totals)
-  $('#protocol-foot').innerHTML = `<tr>
-    <td>Σ</td>
-    ${players.map(p => {
-      const total = table.totals[p.id] || 0;
-      const cls = total > 0 ? 'total-positive' : total < 0 ? 'total-negative' : 'total-zero';
-      return `<td class="${cls}">${formatScore(total)}</td>`;
-    }).join('')}
-  </tr>`;
+  $('#protocol-foot').innerHTML = buildProtocolFoot(table, players);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -421,7 +436,7 @@ function toggleNeken(playerId) {
 }
 
 // Returns the auto-assigned card for the neken loser:
-// double the worst card played by any non-neken loser this round.
+// double the worst card played by any loser this round.
 function getNekenCards() {
   const losers = getActivePlayers().filter(id => id !== roundState.winnerId);
   const nekenPlayers = losers.filter(id => roundState.nekenIds.has(id));
@@ -441,9 +456,15 @@ function getNekenCards() {
 
   const result = {};
   nekenPlayers.forEach(id => {
-    result[id] = worstCard; // null until at least one non-neken loser has picked
+    result[id] = worstCard; // null until at least one loser has picked
   });
   return result;
+}
+
+// The penalty a neken loser takes: double the worst card, but never below 50.
+function nekenPenalty(worstCard) {
+  const doubled = worstCard ? worstCard.points * 2 : 0;
+  return Math.max(doubled, NEKEN_PENALTY);
 }
 
 function renderWinnerCardAssignment() {
@@ -487,12 +508,13 @@ function renderLoserAssignments() {
 
     if (isNeken) {
       const nekenCard = nekenCards[p.id];
-      const points = nekenCard ? nekenCard.points * 2 : 0;
+      // A nek is at least 50, or double the worst card if that is higher.
+      const points = nekenPenalty(nekenCard);
       const ownCardId = roundState.loserCards[p.id];
       const ownCard = ownCardId ? getCardById(ownCardId) : null;
       const cardLabel = nekenCard
         ? `${escHtml(nekenCard.name)} ×2`
-        : '<em>Väntar på sämsta kort…</em>';
+        : `<em>Minst ${NEKEN_PENALTY}</em>`;
       return `<div class="loser-row">
         <span class="loser-row__name">${escHtml(p.name)}</span>
         <button class="loser-row__neken-btn loser-row__neken-btn--active" data-neken-player="${p.id}">Neken ✕</button>
@@ -500,7 +522,7 @@ function renderLoserAssignments() {
           ${ownCard ? `${escHtml(ownCard.name)} (${ownCard.points}p)` : 'Välj kort...'}
         </button>
         <span class="loser-row__neken-card">${cardLabel}</span>
-        ${nekenCard ? `<span class="loser-row__points">−${points}</span>` : ''}
+        <span class="loser-row__points loser-row__points--neken">−${points}</span>
       </div>`;
     }
 
@@ -538,8 +560,7 @@ function updateRoundPreview() {
   let totalPoints = 0;
   losers.forEach(id => {
     if (roundState.nekenIds.has(id)) {
-      const card = nekenCards[id];
-      totalPoints += card ? card.points * 2 : 0;
+      totalPoints += nekenPenalty(nekenCards[id]);
     } else {
       const cardId = roundState.loserCards[id];
       if (cardId) {
@@ -560,18 +581,36 @@ function confirmRound() {
   const nekenCards = getNekenCards();
   if (!losers.every(id => !!roundState.loserCards[id])) return;
 
+  let winnerScore = 0;
+  const loserData = losers.map(id => {
+    if (roundState.nekenIds.has(id)) {
+      winnerScore += nekenPenalty(nekenCards[id]);
+      return { playerId: id, cardId: nekenCards[id].id, neken: true };
+    }
+    const card = getCardById(roundState.loserCards[id]);
+    winnerScore += card ? card.points : 0;
+    return { playerId: id, cardId: roundState.loserCards[id] };
+  });
+
   const roundData = {
     winnerId: roundState.winnerId,
     winnerCardId: roundState.winnerCardId,
     standByIds: [...roundState.standByIds],
-    losers: losers.map(id => {
-      if (roundState.nekenIds.has(id)) {
-        return { playerId: id, cardId: nekenCards[id].id, neken: true };
-      }
-      return { playerId: id, cardId: roundState.loserCards[id] };
-    })
+    losers: loserData
   };
 
+  // Low-stake rounds may be recorded without affecting the standings.
+  if (winnerScore <= LOW_STAKE_THRESHOLD) {
+    showProtocolQuestion(winnerScore, (counted) => {
+      finalizeRound({ ...roundData, counted });
+    });
+    return;
+  }
+
+  finalizeRound({ ...roundData, counted: true });
+}
+
+function finalizeRound(roundData) {
   activeGame = addRound(activeGame, roundData);
   GameStore.save(activeGame);
   closeRoundModal();
@@ -850,43 +889,8 @@ function viewGame(gameId) {
     ${players.map(p => `<th>${escHtml(p.name)}</th>`).join('')}
   </tr>`;
 
-  const reversedRounds = [...table.rounds].reverse();
-  $('#view-protocol-body').innerHTML = reversedRounds.map(round => {
-    const cells = players.map(p => {
-      const s = round.scores[p.id];
-      if (s.isStandBy) {
-        return `<td><div class="protocol-cell">
-          <span class="protocol-cell__round protocol-cell__round--standby">—</span>
-          <span class="protocol-cell__total">${formatScore(s.runningTotal)}</span>
-        </div></td>`;
-      }
-      if (s.isWinner) {
-        const winnerClass = s.hadNeken ? 'protocol-cell__round--winner protocol-cell__round--winner-neken' : 'protocol-cell__round--winner';
-        const winnerCard = s.cardId ? getCardById(s.cardId) : null;
-        return `<td><div class="protocol-cell">
-          <span class="protocol-cell__round ${winnerClass}">+${s.roundScore}</span>
-          <span class="protocol-cell__total">${formatScore(s.runningTotal)}</span>
-          ${winnerCard ? `<span class="protocol-cell__card protocol-cell__card--winner">${escHtml(winnerCard.name)}</span>` : ''}
-        </div></td>`;
-      }
-      const card = s.cardId ? getCardById(s.cardId) : null;
-      return `<td><div class="protocol-cell">
-        <span class="protocol-cell__round protocol-cell__round--loser">${s.roundScore}</span>
-        <span class="protocol-cell__total">${formatScore(s.runningTotal)}</span>
-        ${card ? `<span class="protocol-cell__card">${escHtml(card.name)}${s.neken ? ' ×2' : ''}</span>` : ''}
-      </div></td>`;
-    }).join('');
-    return `<tr><td>${round.roundNumber}</td>${cells}</tr>`;
-  }).join('');
-
-  $('#view-protocol-foot').innerHTML = `<tr>
-    <td>Σ</td>
-    ${players.map(p => {
-      const total = table.totals[p.id] || 0;
-      const cls = total > 0 ? 'total-positive' : total < 0 ? 'total-negative' : 'total-zero';
-      return `<td class="${cls}">${formatScore(total)}</td>`;
-    }).join('')}
-  </tr>`;
+  $('#view-protocol-body').innerHTML = buildProtocolBody(table, players);
+  $('#view-protocol-foot').innerHTML = buildProtocolFoot(table, players);
 
   navigateTo('view-game');
 }
@@ -1324,6 +1328,23 @@ function closeConfirm() {
   confirmCallback = null;
 }
 
+// ─── Protocol question (low-stake round) ──────────────────────────────────────
+let protocolCallback = null;
+
+function showProtocolQuestion(winnerScore, onAnswer) {
+  $('#protocol-text').textContent =
+    `Omgången är värd endast ${winnerScore} poäng. Ska omgången protokollföras (räknas i ställningen)?`;
+  protocolCallback = onAnswer;
+  $('#protocol-dialog').classList.add('active');
+}
+
+function answerProtocolQuestion(counted) {
+  const cb = protocolCallback;
+  protocolCallback = null;
+  $('#protocol-dialog').classList.remove('active');
+  if (cb) cb(counted);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // UTILITIES
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1528,6 +1549,10 @@ function bindEvents() {
     closeConfirm();
   });
   $('#confirm-no').addEventListener('click', closeConfirm);
+
+  // Protocol question (low-stake round)
+  $('#protocol-yes').addEventListener('click', () => answerProtocolQuestion(true));
+  $('#protocol-no').addEventListener('click', () => answerProtocolQuestion(false));
 
   // Stats
   $('#stats-tabs').addEventListener('click', (e) => {

@@ -6,6 +6,18 @@
 import { getCardById } from './cards.js';
 
 /**
+ * A "nek" (neken) costs the losing player at least this many points.
+ * The penalty is double the card value, but never less than this floor.
+ */
+export const NEKEN_PENALTY = 50;
+
+/**
+ * A round whose pot (winner score) is at or below this threshold may be
+ * recorded without affecting the standings (see round.counted).
+ */
+export const LOW_STAKE_THRESHOLD = 15;
+
+/**
  * Utility function to generate a unique ID.
  */
 export function uid() {
@@ -36,14 +48,14 @@ export function createGame(playerIds) {
 /**
  * Add a round to a game. Returns a new game object (immutable update).
  * @param {object} game - The current game state
- * @param {object} roundData - { winnerId, standByIds, losers: [{playerId, cardId, neken}] }
+ * @param {object} roundData - { winnerId, standByIds, losers: [{playerId, cardId, neken}], counted }
  * @returns {object} The updated game state
  */
 export function addRound(game, roundData) {
   if (!game || !Array.isArray(game.playerIds) || !Array.isArray(game.rounds)) {
     throw new Error('Ogiltigt spel');
   }
-  const { winnerId, winnerCardId = null, standByIds = [], losers = [] } = roundData;
+  const { winnerId, winnerCardId = null, standByIds = [], losers = [], counted = true } = roundData;
   if (!game.playerIds.includes(winnerId)) {
     throw new Error('Vinnaren finns inte i spelet');
   }
@@ -61,7 +73,8 @@ export function addRound(game, roundData) {
     throw new Error('Okänt vinnarkort');
   }
 
-  // Calculate winner score = sum of all loser card points (neken = doubled)
+  // Calculate winner score = sum of all loser card points
+  // (neken = double the card, but never less than the fixed penalty).
   let winnerScore = 0;
   const loserIds = new Set();
   const loserEntries = losers.map(l => {
@@ -77,7 +90,7 @@ export function addRound(game, roundData) {
     }
     loserIds.add(l.playerId);
     const points = card.points;
-    const actualPoints = l.neken ? points * 2 : points;
+    const actualPoints = l.neken ? Math.max(points * 2, NEKEN_PENALTY) : points;
     winnerScore += actualPoints;
     return { playerId: l.playerId, cardId: l.cardId, score: -actualPoints, neken: l.neken || false };
   });
@@ -93,6 +106,7 @@ export function addRound(game, roundData) {
     winnerScore: winnerScore,
     standByIds: [...standByIds],
     losers: loserEntries,
+    counted: counted !== false,
     timestamp: new Date().toISOString()
   };
 
@@ -146,6 +160,8 @@ export function calculateScoreTable(game) {
     const scores = {};
     const standByIds = Array.isArray(round.standByIds) ? round.standByIds : [];
     const losers = Array.isArray(round.losers) ? round.losers : [];
+    // A round is counted (affects standings) unless explicitly flagged otherwise.
+    const counted = round.counted !== false;
 
     // Initialize all players
     playerIds.forEach(pid => {
@@ -175,15 +191,18 @@ export function calculateScoreTable(game) {
       scores[l.playerId].neken = l.neken || false;
     });
 
-    // Update running totals
+    // Update running totals — a non-counted round leaves the standings unchanged.
     playerIds.forEach(pid => {
-      runningTotals[pid] += scores[pid].roundScore;
+      if (counted) {
+        runningTotals[pid] += scores[pid].roundScore;
+      }
       scores[pid].runningTotal = runningTotals[pid];
     });
 
     return {
       roundNumber: round.roundNumber,
       timestamp: round.timestamp,
+      counted,
       scores
     };
   });

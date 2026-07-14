@@ -87,7 +87,7 @@ function runTests() {
     console.error('❌ completeGame failed', err);
   }
 
-  // Test: Neken scoring
+  // Test: Neken scoring (double the card, floored at 50)
   try {
     let game = createGame(['p1', 'p2', 'p3']);
     const roundData = {
@@ -106,6 +106,90 @@ function runTests() {
   } catch (err) {
     failures++;
     console.error('❌ Neken scoring failed', err);
+  }
+
+  // Test: Neken floor — a low card doubled is still at least 50
+  try {
+    let game = createGame(['p1', 'p2', 'p3']);
+    game = addRound(game, {
+      winnerId: 'p1',
+      losers: [
+        { playerId: 'p2', cardId: 'num_2', neken: true }, // 10 * 2 = 20 -> floored to 50
+        { playerId: 'p3', cardId: 'num_1', neken: false }  // 5pts
+      ]
+    });
+    const table = calculateScoreTable(game);
+    assert.strictEqual(table.totals['p2'], -50); // floor applied
+    assert.strictEqual(table.totals['p1'], 55);  // 50 + 5
+    console.log('✅ Neken floor passes');
+  } catch (err) {
+    failures++;
+    console.error('❌ Neken floor failed', err);
+  }
+
+  // Test: Neken above floor — a high card doubled exceeds 50
+  try {
+    let game = createGame(['p1', 'p2']);
+    game = addRound(game, {
+      winnerId: 'p1',
+      losers: [{ playerId: 'p2', cardId: 'num_12', neken: true }] // 60 * 2 = 120
+    });
+    const table = calculateScoreTable(game);
+    assert.strictEqual(table.totals['p2'], -120);
+    assert.strictEqual(table.totals['p1'], 120);
+    console.log('✅ Neken above floor passes');
+  } catch (err) {
+    failures++;
+    console.error('❌ Neken above floor failed', err);
+  }
+
+  // Test: Non-counted (low-stake) round updates protocol but not standings
+  try {
+    let game = createGame(['p1', 'p2', 'p3']);
+    // First a normal counted round
+    game = addRound(game, {
+      winnerId: 'p1',
+      losers: [
+        { playerId: 'p2', cardId: 'num_10', neken: false }, // 50
+        { playerId: 'p3', cardId: 'num_2', neken: false }   // 10
+      ]
+    });
+    // Then a low-stake round the players chose NOT to record in the standings
+    game = addRound(game, {
+      winnerId: 'p2',
+      counted: false,
+      losers: [
+        { playerId: 'p1', cardId: 'num_1', neken: false }, // 5
+        { playerId: 'p3', cardId: 'num_1', neken: false }  // 5
+      ]
+    });
+    const table = calculateScoreTable(game);
+    // Standings reflect only the first round; the second leaves them unchanged
+    assert.strictEqual(table.totals['p1'], 60);
+    assert.strictEqual(table.totals['p2'], -50);
+    assert.strictEqual(table.totals['p3'], -10);
+    // The round is still recorded in the protocol
+    assert.strictEqual(game.rounds.length, 2);
+    assert.strictEqual(game.rounds[1].counted, false);
+    assert.strictEqual(table.rounds[1].counted, false);
+    console.log('✅ Non-counted round passes');
+  } catch (err) {
+    failures++;
+    console.error('❌ Non-counted round failed', err);
+  }
+
+  // Test: rounds are counted by default
+  try {
+    let game = createGame(['p1', 'p2']);
+    game = addRound(game, {
+      winnerId: 'p1',
+      losers: [{ playerId: 'p2', cardId: 'num_2', neken: false }]
+    });
+    assert.strictEqual(game.rounds[0].counted, true);
+    console.log('✅ Default counted passes');
+  } catch (err) {
+    failures++;
+    console.error('❌ Default counted failed', err);
   }
 
   // Test: invalid round data should fail loudly instead of scoring as zero
