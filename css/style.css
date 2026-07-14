@@ -638,6 +638,25 @@ body {
   opacity: 0.85;
 }
 
+/* Non-counted (low-stake) round — recorded but does not affect the standings */
+.protocol-row--void td {
+  opacity: 0.55;
+}
+.protocol-row--void .protocol-cell__round--winner,
+.protocol-row--void .protocol-cell__round--loser {
+  text-decoration: line-through;
+}
+.protocol-void-badge {
+  display: block;
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  line-height: 1.1;
+  margin-top: 2px;
+}
+
 /* Totals row */
 .protocol-table tfoot td {
   background: var(--cream-200);
@@ -891,6 +910,9 @@ body {
   font-size: 0.95rem;
   min-width: 50px;
   text-align: right;
+}
+.loser-row__points--neken {
+  color: var(--gold-600, #b8892e);
 }
 
 .loser-row__neken-btn {
