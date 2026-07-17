@@ -10,6 +10,7 @@ import {
 } from './game.js';
 import { computeAdvancedStats, getMostCommonCard, getMostCommonWinnerCard, getTopCards, getLeaderboard } from './stats.js';
 import { downloadExport, importFile } from './importexport.js';
+import { $, $$, escHtml, avatarInitial, formatScore, showToast, addSwipeToDismiss } from './dom.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STATE
@@ -39,12 +40,6 @@ let cardPickerTarget = null; // playerId being assigned
 let selectedStatsPlayerId = null;
 let cachedStats = null;
 let heatmapMode = 'loser'; // 'loser' | 'winner'
-
-// ═══════════════════════════════════════════════════════════════════════════
-// DOM REFERENCES
-// ═══════════════════════════════════════════════════════════════════════════
-const $ = (sel) => document.querySelector(sel);
-const $$ = (sel) => [...document.querySelectorAll(sel)];
 
 // ═══════════════════════════════════════════════════════════════════════════
 // NAVIGATION
@@ -707,10 +702,15 @@ function renderCardGroup(selector, cards) {
   }).join('');
 }
 
-function openCardPicker(playerId) {
-  const player = PlayerStore.get(playerId);
-  $('#card-picker-title').textContent = `Välj kort för ${player?.name || '?'}`;
-  cardPickerTarget = playerId;
+// Sentinel target meaning "assign the winner's card" rather than a loser's.
+const WINNER_CARD_TARGET = '__winner__';
+
+function openCardPicker(target) {
+  const name = target === WINNER_CARD_TARGET
+    ? PlayerStore.get(roundState.winnerId)?.name
+    : PlayerStore.get(target)?.name;
+  $('#card-picker-title').textContent = `Välj kort för ${name || '?'}`;
+  cardPickerTarget = target;
   $('#card-picker-overlay').classList.add('active');
 }
 
@@ -726,7 +726,7 @@ function closeCardPicker(skipAnimation = false) {
 }
 
 function selectCard(cardId) {
-  if (cardPickerTarget === '__winner__') {
+  if (cardPickerTarget === WINNER_CARD_TARGET) {
     roundState.winnerCardId = cardId;
     closeCardPicker();
     renderWinnerCardAssignment();
@@ -1345,25 +1345,6 @@ function answerProtocolQuestion(counted) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// UTILITIES
-// ═══════════════════════════════════════════════════════════════════════════
-function escHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
-
-/** First letter of a name, uppercased and HTML-escaped, for avatars. */
-function avatarInitial(name) {
-  return escHtml(String(name || '').charAt(0).toUpperCase());
-}
-
-function formatScore(score) {
-  if (score > 0) return `+${score}`;
-  return String(score);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
 // IMPORT / EXPORT
 // ═══════════════════════════════════════════════════════════════════════════
 function handleExport() {
@@ -1380,8 +1361,8 @@ async function handleImportFile(file) {
   try {
     const { playersAdded, gamesAdded } = await importFile(file);
     // Invalidate store caches so the app reads fresh data
-    PlayerStore._cache = null;
-    GameStore._cache = null;
+    PlayerStore.invalidate();
+    GameStore.invalidate();
     activeGame = GameStore.getActive();
     renderHome();
     showToast(`Importerat: ${gamesAdded} spel, ${playersAdded} nya spelare`);
@@ -1390,62 +1371,6 @@ async function handleImportFile(file) {
   }
   // Reset file input so the same file can be imported again if needed
   $('#input-import-file').value = '';
-}
-
-// ─── Toast ───────────────────────────────────────────────────────────────────
-let toastTimer = null;
-
-function showToast(message) {
-  let toast = $('#app-toast');
-  if (!toast) {
-    toast = document.createElement('div');
-    toast.id = 'app-toast';
-    toast.className = 'app-toast';
-    document.body.appendChild(toast);
-  }
-  toast.textContent = message;
-  toast.classList.add('app-toast--visible');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.remove('app-toast--visible'), 3000);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// SWIPE TO DISMISS
-// ═══════════════════════════════════════════════════════════════════════════
-function addSwipeToDismiss(sheetEl, closeFn) {
-  let startY = 0;
-  let startScrollTop = 0;
-
-  sheetEl.addEventListener('touchstart', (e) => {
-    startY = e.touches[0].clientY;
-    startScrollTop = sheetEl.scrollTop;
-    sheetEl.style.transition = 'none';
-  }, { passive: true });
-
-  sheetEl.addEventListener('touchmove', (e) => {
-    if (startScrollTop > 0) return;
-    const dy = e.touches[0].clientY - startY;
-    if (dy > 0) sheetEl.style.transform = `translateY(${dy}px)`;
-  }, { passive: true });
-
-  sheetEl.addEventListener('touchend', (e) => {
-    const dy = e.changedTouches[0].clientY - startY;
-    if (startScrollTop === 0 && dy > 80) {
-      sheetEl.style.transition = 'transform 200ms ease';
-      sheetEl.style.transform = 'translateY(100%)';
-      setTimeout(() => {
-        sheetEl.style.transition = '';
-        sheetEl.style.transform = '';
-        closeFn(true);
-      }, 200);
-    } else {
-      sheetEl.style.transition = 'transform 300ms cubic-bezier(0.32, 0.72, 0, 1)';
-      sheetEl.style.transform = '';
-      sheetEl.addEventListener('transitionend', () => {
-        sheetEl.style.transition = '';
-      }, { once: true });
-    }
-  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1513,12 +1438,7 @@ function bindEvents() {
   // Winner card assignment
   $('#winner-card-assignment').addEventListener('click', (e) => {
     const cardBtn = e.target.closest('.loser-row__card-btn');
-    if (cardBtn) {
-      cardPickerTarget = '__winner__';
-      const player = PlayerStore.get(roundState.winnerId);
-      $('#card-picker-title').textContent = `Välj kort för ${player?.name || '?'}`;
-      $('#card-picker-overlay').classList.add('active');
-    }
+    if (cardBtn) openCardPicker(WINNER_CARD_TARGET);
   });
 
   // Loser card assignment

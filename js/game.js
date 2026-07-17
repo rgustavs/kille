@@ -4,6 +4,9 @@
  * Does not handle persistence or side effects.
  */
 import { getCardById } from './cards.js';
+import { uid } from './util.js';
+
+export { uid };
 
 /**
  * A "nek" (neken) costs the losing player at least this many points.
@@ -16,13 +19,6 @@ export const NEKEN_PENALTY = 50;
  * recorded without affecting the standings (see round.counted).
  */
 export const LOW_STAKE_THRESHOLD = 15;
-
-/**
- * Utility function to generate a unique ID.
- */
-export function uid() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-}
 
 /**
  * Create a new game with selected player IDs.

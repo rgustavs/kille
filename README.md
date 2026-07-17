@@ -90,7 +90,7 @@ A pure functional engine inside `js/game.js` that receives a game object contain
 Follows a simple `navigateTo(screenId)` SPA pattern. Instead of a virtual DOM, it explicitly controls toggling of `.screen.active` CSS classes and delegates event listeners broadly to handle clicks.
 
 **4. PWA Pipeline (`sw.js` & `manifest.json`)**  
-Employs a "Cache-First" progressive offline strategy. On installation, all UI core files are downloaded and cached. During subsequent loads, it retrieves files straight from the Service Worker cache, allowing immediate, offline boot-ups.
+Employs a "stale-while-revalidate" offline strategy. On installation, all UI core files (including card images) are precached. During subsequent loads, requests are served immediately from the Service Worker cache while a fresh copy is fetched in the background and stored for next time, allowing instant, offline boot-ups that still pick up updates.
 
 ## Deployment
 
