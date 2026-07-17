@@ -4,6 +4,9 @@
  * Does not handle persistence or side effects.
  */
 import { getCardById } from './cards.js';
+import { uid } from './util.js';
+
+export { uid };
 
 /**
  * A "nek" (neken) costs the losing player at least this many points.
@@ -16,13 +19,6 @@ export const NEKEN_PENALTY = 50;
  * recorded without affecting the standings (see round.counted).
  */
 export const LOW_STAKE_THRESHOLD = 15;
-
-/**
- * Utility function to generate a unique ID.
- */
-export function uid() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-}
 
 /**
  * Create a new game with selected player IDs.
@@ -208,60 +204,4 @@ export function calculateScoreTable(game) {
   });
 
   return { rounds, totals: { ...runningTotals } };
-}
-
-/**
- * Get lifetime stats for all players.
- * Refactored to accept data as parameters rather than reading from a global store.
- * @param {object[]} games - Array of all game objects
- * @param {object[]} players - Array of all player objects
- * @returns {object} Player statistics dictionary keyed by player ID
- */
-export function getPlayerStats(games, players) {
-  const stats = {};
-
-  players.forEach(p => {
-    stats[p.id] = { gamesPlayed: 0, roundsPlayed: 0, totalScore: 0, roundsWon: 0, gamesWon: 0 };
-  });
-
-  games.forEach(game => {
-    const table = calculateScoreTable(game);
-    const gamePlayers = game.playerIds.filter(pid => stats[pid]);
-
-    gamePlayers.forEach(pid => {
-      stats[pid].gamesPlayed++;
-      stats[pid].totalScore += table.totals[pid] || 0;
-    });
-
-    // Count rounds
-    game.rounds.forEach(round => {
-      const standByIds = Array.isArray(round.standByIds) ? round.standByIds : [];
-      gamePlayers.forEach(pid => {
-        if (!standByIds.includes(pid)) {
-          stats[pid].roundsPlayed++;
-        }
-      });
-      if (stats[round.winnerId]) {
-        stats[round.winnerId].roundsWon++;
-      }
-    });
-
-    // Determine game winner (highest total)
-    if (game.status === 'completed' && gamePlayers.length > 0) {
-      let maxScore = -Infinity;
-      let winnerId = null;
-      gamePlayers.forEach(pid => {
-        const score = table.totals[pid] || 0;
-        if (score > maxScore) {
-          maxScore = score;
-          winnerId = pid;
-        }
-      });
-      if (winnerId && stats[winnerId]) {
-        stats[winnerId].gamesWon++;
-      }
-    }
-  });
-
-  return stats;
 }

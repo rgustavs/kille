@@ -1,0 +1,10 @@
+{
+  "name": "kille-poangraknare",
+  "version": "1.0.0",
+  "description": "Digital poängräknare för det klassiska svenska kortspelet Kille.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node tests/game.test.js && node tests/stats.test.js"
+  }
+}

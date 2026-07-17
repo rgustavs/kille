@@ -2,11 +2,7 @@
  * Kille Infrastructure — LocalStorage Store
  * Handles persistence for players and games.
  */
-
-// ─── Utility ────────────────────────────────────────────────────────────────
-export function uid() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-}
+import { uid } from './util.js';
 
 // ─── Player Store ───────────────────────────────────────────────────────────
 const PLAYERS_KEY = 'kille_players';
@@ -23,6 +19,11 @@ function readJsonArray(key) {
 
 export const PlayerStore = {
   _cache: null,
+
+  /** Drop the in-memory cache so the next read reloads from localStorage. */
+  invalidate() {
+    this._cache = null;
+  },
 
   getAll() {
     if (!this._cache) {
@@ -75,6 +76,11 @@ const ACTIVE_KEY = 'kille_active_game_id';
 
 export const GameStore = {
   _cache: null,
+
+  /** Drop the in-memory cache so the next read reloads from localStorage. */
+  invalidate() {
+    this._cache = null;
+  },
 
   getAll() {
     if (!this._cache) {

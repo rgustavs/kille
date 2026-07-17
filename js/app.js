@@ -10,6 +10,7 @@ import {
 } from './game.js';
 import { computeAdvancedStats, getMostCommonCard, getMostCommonWinnerCard, getTopCards, getLeaderboard } from './stats.js';
 import { downloadExport, importFile } from './importexport.js';
+import { $, $$, escHtml, avatarInitial, formatScore, showToast, addSwipeToDismiss } from './dom.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STATE
@@ -34,18 +35,11 @@ let roundState = {
 
 // Card picker
 let cardPickerTarget = null; // playerId being assigned
-let cardPickerCallback = null;
 
 // Stats
 let selectedStatsPlayerId = null;
 let cachedStats = null;
 let heatmapMode = 'loser'; // 'loser' | 'winner'
-
-// ═══════════════════════════════════════════════════════════════════════════
-// DOM REFERENCES
-// ═══════════════════════════════════════════════════════════════════════════
-const $ = (sel) => document.querySelector(sel);
-const $$ = (sel) => [...document.querySelectorAll(sel)];
 
 // ═══════════════════════════════════════════════════════════════════════════
 // NAVIGATION
@@ -141,7 +135,7 @@ function renderPlayers() {
   empty.style.display = 'none';
   list.innerHTML = players.map(p => `
     <li class="player-item" data-id="${p.id}">
-      <div class="player-item__avatar">${p.name.charAt(0).toUpperCase()}</div>
+      <div class="player-item__avatar">${avatarInitial(p.name)}</div>
       <span class="player-item__name">${escHtml(p.name)}</span>
       <button class="player-item__action" data-action="remove" data-id="${p.id}" title="Ta bort">✕</button>
     </li>
@@ -181,7 +175,7 @@ function renderSetup() {
 
   grid.innerHTML = players.map(p => `
     <div class="setup-player ${selectedPlayerIds.has(p.id) ? 'selected' : ''}" data-id="${p.id}">
-      <div class="setup-player__avatar">${p.name.charAt(0).toUpperCase()}</div>
+      <div class="setup-player__avatar">${avatarInitial(p.name)}</div>
       <div class="setup-player__name">${escHtml(p.name)}</div>
     </div>
   `).join('');
@@ -696,7 +690,7 @@ function renderCardGroup(selector, cards) {
   $(selector).innerHTML = cards.map(c => {
     let visual = '';
     if (c.image) {
-      visual = `<img class="card-tile__image" src="${c.image}" alt="${c.name}" loading="lazy">`;
+      visual = `<img class="card-tile__image" src="${c.image}" alt="${escHtml(c.name)}" loading="lazy">`;
     } else if (c.type === 'number') {
       visual = `<div class="card-tile__number">${c.number}</div>`;
     }
@@ -708,10 +702,15 @@ function renderCardGroup(selector, cards) {
   }).join('');
 }
 
-function openCardPicker(playerId) {
-  const player = PlayerStore.get(playerId);
-  $('#card-picker-title').textContent = `Välj kort för ${player?.name || '?'}`;
-  cardPickerTarget = playerId;
+// Sentinel target meaning "assign the winner's card" rather than a loser's.
+const WINNER_CARD_TARGET = '__winner__';
+
+function openCardPicker(target) {
+  const name = target === WINNER_CARD_TARGET
+    ? PlayerStore.get(roundState.winnerId)?.name
+    : PlayerStore.get(target)?.name;
+  $('#card-picker-title').textContent = `Välj kort för ${name || '?'}`;
+  cardPickerTarget = target;
   $('#card-picker-overlay').classList.add('active');
 }
 
@@ -727,7 +726,7 @@ function closeCardPicker(skipAnimation = false) {
 }
 
 function selectCard(cardId) {
-  if (cardPickerTarget === '__winner__') {
+  if (cardPickerTarget === WINNER_CARD_TARGET) {
     roundState.winnerCardId = cardId;
     closeCardPicker();
     renderWinnerCardAssignment();
@@ -954,7 +953,7 @@ function renderLeaderboard() {
     const scoreClass = p.totalScore > 0 ? 'positive' : p.totalScore < 0 ? 'negative' : 'zero';
     return `<div class="leaderboard-item">
       <div class="leaderboard-rank">${p.rank}</div>
-      <div class="leaderboard-avatar">${p.name.charAt(0).toUpperCase()}</div>
+      <div class="leaderboard-avatar">${avatarInitial(p.name)}</div>
       <div class="leaderboard-info">
         <button class="leaderboard-name-btn" data-player-goto="${escHtml(p.id)}">${escHtml(p.name)}</button>
         <div class="leaderboard-meta">${p.gamesPlayed} spel &middot; ${p.roundsWon} v/${p.roundsPlayed} r &middot; ${p.gameWinRate}% vinstprocent</div>
@@ -1086,7 +1085,7 @@ function renderPlayerDetail(playerId) {
 
   detail.innerHTML = `
     <div class="player-detail-header">
-      <div class="player-detail-avatar">${player.name.charAt(0).toUpperCase()}</div>
+      <div class="player-detail-avatar">${avatarInitial(player.name)}</div>
       <div class="player-detail-name">${escHtml(player.name)}</div>
     </div>
 
@@ -1346,20 +1345,6 @@ function answerProtocolQuestion(counted) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// UTILITIES
-// ═══════════════════════════════════════════════════════════════════════════
-function escHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
-
-function formatScore(score) {
-  if (score > 0) return `+${score}`;
-  return String(score);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
 // IMPORT / EXPORT
 // ═══════════════════════════════════════════════════════════════════════════
 function handleExport() {
@@ -1376,8 +1361,8 @@ async function handleImportFile(file) {
   try {
     const { playersAdded, gamesAdded } = await importFile(file);
     // Invalidate store caches so the app reads fresh data
-    PlayerStore._cache = null;
-    GameStore._cache = null;
+    PlayerStore.invalidate();
+    GameStore.invalidate();
     activeGame = GameStore.getActive();
     renderHome();
     showToast(`Importerat: ${gamesAdded} spel, ${playersAdded} nya spelare`);
@@ -1386,62 +1371,6 @@ async function handleImportFile(file) {
   }
   // Reset file input so the same file can be imported again if needed
   $('#input-import-file').value = '';
-}
-
-// ─── Toast ───────────────────────────────────────────────────────────────────
-let toastTimer = null;
-
-function showToast(message) {
-  let toast = $('#app-toast');
-  if (!toast) {
-    toast = document.createElement('div');
-    toast.id = 'app-toast';
-    toast.className = 'app-toast';
-    document.body.appendChild(toast);
-  }
-  toast.textContent = message;
-  toast.classList.add('app-toast--visible');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.remove('app-toast--visible'), 3000);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// SWIPE TO DISMISS
-// ═══════════════════════════════════════════════════════════════════════════
-function addSwipeToDismiss(sheetEl, closeFn) {
-  let startY = 0;
-  let startScrollTop = 0;
-
-  sheetEl.addEventListener('touchstart', (e) => {
-    startY = e.touches[0].clientY;
-    startScrollTop = sheetEl.scrollTop;
-    sheetEl.style.transition = 'none';
-  }, { passive: true });
-
-  sheetEl.addEventListener('touchmove', (e) => {
-    if (startScrollTop > 0) return;
-    const dy = e.touches[0].clientY - startY;
-    if (dy > 0) sheetEl.style.transform = `translateY(${dy}px)`;
-  }, { passive: true });
-
-  sheetEl.addEventListener('touchend', (e) => {
-    const dy = e.changedTouches[0].clientY - startY;
-    if (startScrollTop === 0 && dy > 80) {
-      sheetEl.style.transition = 'transform 200ms ease';
-      sheetEl.style.transform = 'translateY(100%)';
-      setTimeout(() => {
-        sheetEl.style.transition = '';
-        sheetEl.style.transform = '';
-        closeFn(true);
-      }, 200);
-    } else {
-      sheetEl.style.transition = 'transform 300ms cubic-bezier(0.32, 0.72, 0, 1)';
-      sheetEl.style.transform = '';
-      sheetEl.addEventListener('transitionend', () => {
-        sheetEl.style.transition = '';
-      }, { once: true });
-    }
-  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1509,12 +1438,7 @@ function bindEvents() {
   // Winner card assignment
   $('#winner-card-assignment').addEventListener('click', (e) => {
     const cardBtn = e.target.closest('.loser-row__card-btn');
-    if (cardBtn) {
-      cardPickerTarget = '__winner__';
-      const player = PlayerStore.get(roundState.winnerId);
-      $('#card-picker-title').textContent = `Välj kort för ${player?.name || '?'}`;
-      $('#card-picker-overlay').classList.add('active');
-    }
+    if (cardBtn) openCardPicker(WINNER_CARD_TARGET);
   });
 
   // Loser card assignment
