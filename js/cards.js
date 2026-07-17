@@ -41,8 +41,3 @@ export function getCardById(id) {
 export function getCardsByType(type) {
   return CARDS.filter(c => c.type === type);
 }
-
-/** Generate a fleur-de-lis pattern string for a number card */
-export function getLiljaPattern(number) {
-  return '⚜'.repeat(number);
-}

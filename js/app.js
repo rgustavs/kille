@@ -34,7 +34,6 @@ let roundState = {
 
 // Card picker
 let cardPickerTarget = null; // playerId being assigned
-let cardPickerCallback = null;
 
 // Stats
 let selectedStatsPlayerId = null;
@@ -141,7 +140,7 @@ function renderPlayers() {
   empty.style.display = 'none';
   list.innerHTML = players.map(p => `
     <li class="player-item" data-id="${p.id}">
-      <div class="player-item__avatar">${p.name.charAt(0).toUpperCase()}</div>
+      <div class="player-item__avatar">${avatarInitial(p.name)}</div>
       <span class="player-item__name">${escHtml(p.name)}</span>
       <button class="player-item__action" data-action="remove" data-id="${p.id}" title="Ta bort">✕</button>
     </li>
@@ -181,7 +180,7 @@ function renderSetup() {
 
   grid.innerHTML = players.map(p => `
     <div class="setup-player ${selectedPlayerIds.has(p.id) ? 'selected' : ''}" data-id="${p.id}">
-      <div class="setup-player__avatar">${p.name.charAt(0).toUpperCase()}</div>
+      <div class="setup-player__avatar">${avatarInitial(p.name)}</div>
       <div class="setup-player__name">${escHtml(p.name)}</div>
     </div>
   `).join('');
@@ -696,7 +695,7 @@ function renderCardGroup(selector, cards) {
   $(selector).innerHTML = cards.map(c => {
     let visual = '';
     if (c.image) {
-      visual = `<img class="card-tile__image" src="${c.image}" alt="${c.name}" loading="lazy">`;
+      visual = `<img class="card-tile__image" src="${c.image}" alt="${escHtml(c.name)}" loading="lazy">`;
     } else if (c.type === 'number') {
       visual = `<div class="card-tile__number">${c.number}</div>`;
     }
@@ -954,7 +953,7 @@ function renderLeaderboard() {
     const scoreClass = p.totalScore > 0 ? 'positive' : p.totalScore < 0 ? 'negative' : 'zero';
     return `<div class="leaderboard-item">
       <div class="leaderboard-rank">${p.rank}</div>
-      <div class="leaderboard-avatar">${p.name.charAt(0).toUpperCase()}</div>
+      <div class="leaderboard-avatar">${avatarInitial(p.name)}</div>
       <div class="leaderboard-info">
         <button class="leaderboard-name-btn" data-player-goto="${escHtml(p.id)}">${escHtml(p.name)}</button>
         <div class="leaderboard-meta">${p.gamesPlayed} spel &middot; ${p.roundsWon} v/${p.roundsPlayed} r &middot; ${p.gameWinRate}% vinstprocent</div>
@@ -1086,7 +1085,7 @@ function renderPlayerDetail(playerId) {
 
   detail.innerHTML = `
     <div class="player-detail-header">
-      <div class="player-detail-avatar">${player.name.charAt(0).toUpperCase()}</div>
+      <div class="player-detail-avatar">${avatarInitial(player.name)}</div>
       <div class="player-detail-name">${escHtml(player.name)}</div>
     </div>
 
@@ -1352,6 +1351,11 @@ function escHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+/** First letter of a name, uppercased and HTML-escaped, for avatars. */
+function avatarInitial(name) {
+  return escHtml(String(name || '').charAt(0).toUpperCase());
 }
 
 function formatScore(score) {

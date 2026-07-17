@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kille-cache-v4';
+const CACHE_NAME = 'kille-cache-v5';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -17,7 +17,16 @@ self.addEventListener('install', (event) => {
         './assets/icons/history.jpg',
         './assets/icons/new_game.jpg',
         './assets/icons/players.jpg',
-        './assets/icons/stats.jpg'
+        './assets/icons/stats.jpg',
+        './assets/cards/harlekin.png',
+        './assets/cards/kuku.png',
+        './assets/cards/husar.png',
+        './assets/cards/kavall.png',
+        './assets/cards/husu.png',
+        './assets/cards/vardshus.png',
+        './assets/cards/kransen.png',
+        './assets/cards/blompotten.png',
+        './assets/cards/blaren.png'
       ]);
     })
   );

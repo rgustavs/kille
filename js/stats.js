@@ -37,6 +37,7 @@ export function computeAdvancedStats(games, players) {
       winnerCardFrequency: {},  // cardId -> count (as winner)
       scoreHistory: [],   // array of game totals over time
       currentStreak: { type: null, count: 0 }, // win/loss streak
+      longestWinStreak: 0, // longest run of winning games ever
       avgScorePerRound: 0,
       winRate: 0,
       gameWinRate: 0,
@@ -214,6 +215,7 @@ export function computeAdvancedStats(games, players) {
 
     const sorted = [...ps.scoreHistory].sort((a, b) => new Date(a.date) - new Date(b.date));
     let streak = { type: null, count: 0 };
+    let longestWin = 0;
     sorted.forEach(h => {
       // Determine if this was a "win" game (positive score) or "loss" (negative)
       const type = h.score > 0 ? 'win' : h.score < 0 ? 'loss' : 'draw';
@@ -222,8 +224,12 @@ export function computeAdvancedStats(games, players) {
       } else {
         streak = { type, count: 1 };
       }
+      if (streak.type === 'win' && streak.count > longestWin) {
+        longestWin = streak.count;
+      }
     });
     ps.currentStreak = streak;
+    ps.longestWinStreak = longestWin;
   });
 
   // Records
@@ -278,8 +284,8 @@ function computeRecords(playerStats, players) {
     records.mostGamesWon = updateRecord(records.mostGamesWon, { playerId: p.id, name: p.name }, ps.gamesWon, true);
     records.mostRoundsWon = updateRecord(records.mostRoundsWon, { playerId: p.id, name: p.name }, ps.roundsWon, true);
     records.mostNeken = updateRecord(records.mostNeken, { playerId: p.id, name: p.name }, ps.nekenGiven, true);
-    if (ps.currentStreak.type === 'win') {
-      records.longestWinStreak = updateRecord(records.longestWinStreak, { playerId: p.id, name: p.name }, ps.currentStreak.count, true);
+    if (ps.longestWinStreak > 0) {
+      records.longestWinStreak = updateRecord(records.longestWinStreak, { playerId: p.id, name: p.name }, ps.longestWinStreak, true);
     }
     records.mostGamesPlayed = updateRecord(records.mostGamesPlayed, { playerId: p.id, name: p.name }, ps.gamesPlayed, true);
   });
