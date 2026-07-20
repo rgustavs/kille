@@ -9,8 +9,12 @@ import {
   NEKEN_PENALTY, LOW_STAKE_THRESHOLD
 } from './game.js';
 import { computeAdvancedStats, getMostCommonCard, getMostCommonWinnerCard, getTopCards, getLeaderboard } from './stats.js';
+import { GroupData } from './store.js';
 import { downloadExport, importFile } from './importexport.js';
 import { $, $$, escHtml, avatarInitial, formatScore, showToast, addSwipeToDismiss } from './dom.js';
+import { Session } from './session.js';
+import { Groups, Outbox, onSyncStatus } from './remote.js';
+import { SUPABASE_ENABLED } from './config.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STATE
@@ -75,7 +79,8 @@ function updateHeader(screenId) {
     history: 'Historik',
     'view-game': 'Spelprotokoll',
     stats: 'Statistik',
-    cards: 'Kortvärden'
+    cards: 'Kortvärden',
+    group: 'Grupp'
   };
   $('#header-title').textContent = titles[screenId] || 'Kille';
   const backBtn = $('#btn-back');
@@ -97,6 +102,7 @@ function renderScreen(screenId) {
     case 'history': renderHistory(); break;
     case 'stats': renderStats(); break;
     case 'cards': renderCardValues(); break;
+    case 'group': renderGroup(); break;
     case 'view-game': break; // rendered when entering
   }
 }
@@ -105,6 +111,7 @@ function renderScreen(screenId) {
 // HOME SCREEN
 // ═══════════════════════════════════════════════════════════════════════════
 function renderHome() {
+  renderModeBar();
   const active = GameStore.getActive();
   const continueBtn = $('#btn-continue-game');
   if (active) {
@@ -115,6 +122,358 @@ function renderHome() {
     continueBtn.textContent = `▶ Fortsätt (${playerNames})`;
   } else {
     continueBtn.style.display = 'none';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GROUPS — mode selection, sync & group management
+// ═══════════════════════════════════════════════════════════════════════════
+let syncStatus = 'idle';          // 'idle' | 'syncing' | 'synced' | 'error'
+let lastGroupSnapshot = null;     // most recent { group, members, ... } snapshot
+let unlockedAdminCode = null;     // admin code held in memory once verified
+
+function handleSyncStatus(status) {
+  syncStatus = status;
+  // Only the home mode-bar and group screen reflect sync state.
+  if (currentScreen === 'home') renderModeBar();
+  if (currentScreen === 'group') updateGroupSyncLine();
+}
+
+function syncDotHtml() {
+  const pending = Outbox.pending();
+  let cls = 'sync-dot';
+  let label = 'Synkad';
+  if (syncStatus === 'syncing') { cls += ' sync-dot--syncing'; label = 'Synkar…'; }
+  else if (syncStatus === 'error') { cls += ' sync-dot--error'; label = 'Synk misslyckades'; }
+  else if (pending > 0) { cls += ' sync-dot--pending'; label = `${pending} väntar`; }
+  return `<span class="${cls}"></span>${label}`;
+}
+
+function renderModeBar() {
+  const bar = $('#mode-bar');
+  if (!bar) return;
+
+  if (!SUPABASE_ENABLED) { bar.style.display = 'none'; return; }
+  bar.style.display = '';
+
+  if (Session.isGroup()) {
+    const g = Session.group;
+    const roleBadge = Session.isAdmin()
+      ? '<span class="role-badge role-badge--admin">Admin</span>'
+      : '<span class="role-badge role-badge--member">Medlem</span>';
+    bar.innerHTML = `
+      <span class="mode-bar__icon">👥</span>
+      <span class="mode-bar__text">
+        <span class="mode-bar__title">${escHtml(g.name)} ${roleBadge}</span>
+        <span class="mode-bar__sub">${syncDotHtml()}</span>
+      </span>
+      <button class="mode-bar__btn" id="mode-bar-manage">Hantera</button>`;
+  } else {
+    bar.innerHTML = `
+      <span class="mode-bar__icon">📱</span>
+      <span class="mode-bar__text">
+        <span class="mode-bar__title">Lokalt läge</span>
+        <span class="mode-bar__sub">Data sparas bara på den här enheten</span>
+      </span>
+      <button class="mode-bar__btn" id="mode-bar-manage">Grupp</button>`;
+  }
+}
+
+// ─── Welcome / mode selection ─────────────────────────────────────────────────
+function showWelcome() {
+  currentScreen = 'welcome';
+  screenStack.length = 0;
+  $$('.screen').forEach(el => el.classList.remove('active'));
+  $('#screen-welcome').classList.add('active');
+  $('#header-title').textContent = 'Kille';
+  $('#btn-back').classList.remove('visible');
+  $('#btn-header-action').style.display = 'none';
+  resetWelcomeForms();
+  $('#btn-welcome-back').style.display = Session.hasChosen() ? '' : 'none';
+  window.scrollTo(0, 0);
+}
+
+function resetWelcomeForms() {
+  $('#welcome-join-form').style.display = 'none';
+  $('#welcome-create-form').style.display = 'none';
+  ['#input-join-code', '#input-join-name', '#input-create-name',
+    '#input-create-member', '#input-create-admin'].forEach(sel => { $(sel).value = ''; });
+}
+
+function enterLocalMode() {
+  Session.setLocal();
+  unlockedAdminCode = null;
+  PlayerStore.invalidate();
+  GameStore.invalidate();
+  activeGame = GameStore.getActive();
+  navigateTo('home', { replace: true });
+  screenStack.length = 0;
+}
+
+function enterGroupFromSnapshot(snapshot, memberName, adminUnlocked) {
+  Session.setGroup(snapshot, memberName, adminUnlocked);
+  lastGroupSnapshot = snapshot;
+  GroupData.hydrate(snapshot);
+  activeGame = GameStore.getActive();
+  Outbox.flush();
+  navigateTo('home', { replace: true });
+  screenStack.length = 0;
+}
+
+async function doJoin() {
+  const code = $('#input-join-code').value.trim();
+  const name = $('#input-join-name').value.trim();
+  if (!code) { showToast('Ange en gruppkod'); return; }
+  const btn = $('#btn-do-join');
+  btn.disabled = true;
+  try {
+    const snapshot = await Groups.join(code, name);
+    enterGroupFromSnapshot(snapshot, name, false);
+    showToast(`Inloggad i ${snapshot.group.name}`);
+  } catch (err) {
+    showToast(err.message || 'Inloggning misslyckades');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function doCreate() {
+  const name = $('#input-create-name').value.trim();
+  const member = $('#input-create-member').value.trim();
+  const adminCode = $('#input-create-admin').value.trim();
+  if (!name) { showToast('Ange ett gruppnamn'); return; }
+  if (adminCode.length < 4) { showToast('Admin-koden måste vara minst 4 tecken'); return; }
+  const btn = $('#btn-do-create');
+  btn.disabled = true;
+  try {
+    const snapshot = await Groups.create(name, adminCode, member);
+    unlockedAdminCode = adminCode; // creator is unlocked immediately
+    Session.setGroup(snapshot, member, true);
+    lastGroupSnapshot = snapshot;
+    GroupData.hydrate(snapshot);
+    activeGame = GameStore.getActive();
+    navigateTo('home', { replace: true });
+    screenStack.length = 0;
+    showToast(`Grupp skapad — kod ${snapshot.group.joinCode}`);
+  } catch (err) {
+    showToast(err.message || 'Kunde inte skapa grupp');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ─── Group refresh (pull from central DB) ─────────────────────────────────────
+async function refreshGroup(silent = true) {
+  if (!Session.isGroup()) return;
+  try {
+    await Outbox.flush();
+    const snapshot = await Groups.pull();
+    lastGroupSnapshot = snapshot;
+    // Re-derive our role & member id from the members list.
+    const members = Array.isArray(snapshot.members) ? snapshot.members : [];
+    const meName = Session.memberName;
+    const me = members.find(m =>
+      (Session.memberId && m.id === Session.memberId) ||
+      (meName && m.name.toLowerCase() === meName.toLowerCase()));
+    Session.updateGroup({ name: snapshot.group.name, role: me?.role || 'member' });
+    if (me?.id) {
+      Session._state.memberId = me.id;
+      Session.save();
+    }
+    GroupData.hydrate(snapshot);
+    activeGame = GameStore.getActive();
+    if (currentScreen === 'group') renderGroup();
+    if (currentScreen === 'home') renderHome();
+    if (!silent) showToast('Uppdaterat');
+  } catch (err) {
+    if (!silent) showToast(err.message || 'Kunde inte uppdatera');
+  }
+}
+
+// ─── Group management screen ──────────────────────────────────────────────────
+function updateGroupSyncLine() {
+  const el = $('#group-sync-line');
+  if (el) el.innerHTML = syncDotHtml();
+}
+
+function renderGroup() {
+  const container = $('#group-content');
+  if (!Session.isGroup()) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-state__text">Inte inloggad i någon grupp.</div></div>';
+    return;
+  }
+  const g = Session.group;
+  const isAdmin = Session.isAdmin();
+  const adminUnlocked = !!unlockedAdminCode;
+  const members = lastGroupSnapshot?.members || [];
+
+  const membersHtml = members.length ? members.map(m => {
+    const badge = m.role === 'admin'
+      ? '<span class="role-badge role-badge--admin">Admin</span>'
+      : '<span class="role-badge role-badge--member">Medlem</span>';
+    const isSelf = (Session.memberId && m.id === Session.memberId);
+    let actions = '';
+    if (isAdmin && adminUnlocked && !isSelf) {
+      if (m.role === 'admin') {
+        actions += `<button class="member-item__action" data-demote="${escHtml(m.id)}">Gör till medlem</button>`;
+      } else {
+        actions += `<button class="member-item__action" data-promote="${escHtml(m.id)}">Gör till admin</button>`;
+        actions += `<button class="member-item__action member-item__action--danger" data-remove-member="${escHtml(m.id)}">Ta bort</button>`;
+      }
+    }
+    return `<li class="member-item">
+      <span class="member-item__name">${escHtml(m.name)}${isSelf ? ' (du)' : ''}</span>
+      ${badge}
+      ${actions}
+    </li>`;
+  }).join('') : '<div class="empty-state"><div class="empty-state__text">Inga registrerade medlemmar ännu.</div></div>';
+
+  // Admin section
+  let adminHtml = '';
+  if (isAdmin) {
+    if (!adminUnlocked) {
+      adminHtml = `
+        <div class="panel mb-lg">
+          <h3 class="panel__title">Administration</h3>
+          <p class="field-hint" style="margin-bottom: var(--space-md)">Lås upp med admin-koden för att hantera gruppen.</p>
+          <button class="btn btn--gold btn--full" id="btn-admin-unlock">🔓 Lås upp admin</button>
+        </div>`;
+    } else {
+      adminHtml = `
+        <div class="panel mb-lg">
+          <h3 class="panel__title">Administration</h3>
+          <div class="group-admin-actions">
+            <button class="btn btn--ghost btn--full" id="btn-admin-rename">✎ Byt gruppnamn</button>
+            <button class="btn btn--ghost btn--full" id="btn-admin-regen">🔁 Ny gruppkod</button>
+            <button class="btn btn--ghost btn--full" id="btn-admin-setcode">🔑 Byt admin-kod</button>
+            <button class="btn btn--danger btn--full" id="btn-admin-delete">🗑 Radera gruppen</button>
+          </div>
+        </div>`;
+    }
+  }
+
+  container.innerHTML = `
+    <div class="panel mb-lg">
+      <h3 class="panel__title">${escHtml(g.name)}</h3>
+      <p class="field-hint">Dela gruppkoden med de som ska logga in. Synkstatus: <span id="group-sync-line">${syncDotHtml()}</span></p>
+      <label class="field-label">Gruppkod</label>
+      <div class="group-code-box">
+        <span class="group-code-box__code">${escHtml(g.joinCode)}</span>
+        <button class="group-code-box__copy" id="btn-copy-code">Kopiera</button>
+      </div>
+      <div class="flex-row" style="gap: var(--space-sm); margin-top: var(--space-md)">
+        <button class="btn btn--ghost btn--half" id="btn-group-refresh">↻ Uppdatera</button>
+        <button class="btn btn--secondary btn--half" id="btn-group-leave">Lämna grupp</button>
+      </div>
+    </div>
+
+    <div class="panel mb-lg">
+      <h3 class="panel__title">Medlemmar (${members.length})</h3>
+      <ul class="member-list">${membersHtml}</ul>
+    </div>
+
+    ${adminHtml}
+  `;
+
+  // Ensure member list is fresh from the server when opening the screen.
+  if (!lastGroupSnapshot) refreshGroup(true);
+}
+
+// ─── Admin actions ────────────────────────────────────────────────────────────
+function unlockAdmin() {
+  showPrompt('Ange admin-koden', { placeholder: 'Admin-kod' }, async (code) => {
+    if (!code) return;
+    try {
+      await Groups.verifyAdmin(code);
+      unlockedAdminCode = code;
+      Session.setAdminUnlocked(true);
+      showToast('Adminläge upplåst');
+      renderGroup();
+      renderModeBar();
+    } catch (err) {
+      showToast(err.message || 'Fel admin-kod');
+    }
+  });
+}
+
+function adminRename() {
+  showPrompt('Nytt gruppnamn', { value: Session.group.name }, async (name) => {
+    if (!name || !name.trim()) return;
+    try {
+      const snapshot = await Groups.rename(unlockedAdminCode, name.trim());
+      lastGroupSnapshot = snapshot;
+      Session.updateGroup({ name: snapshot.group.name });
+      renderGroup();
+      showToast('Gruppnamn uppdaterat');
+    } catch (err) { showToast(err.message || 'Misslyckades'); }
+  });
+}
+
+function adminRegenCode() {
+  showConfirm('Skapa en ny gruppkod? Den gamla slutar då att fungera.', async () => {
+    try {
+      const res = await Groups.regenerateJoinCode(unlockedAdminCode);
+      Session.updateGroup({ joinCode: res.joinCode });
+      renderGroup();
+      showToast(`Ny kod: ${res.joinCode}`);
+    } catch (err) { showToast(err.message || 'Misslyckades'); }
+  });
+}
+
+function adminSetCode() {
+  showPrompt('Ny admin-kod (minst 4 tecken)', { placeholder: 'Ny admin-kod' }, async (code) => {
+    if (!code || code.trim().length < 4) { showToast('Minst 4 tecken'); return; }
+    try {
+      await Groups.setAdminCode(unlockedAdminCode, code.trim());
+      unlockedAdminCode = code.trim();
+      showToast('Admin-kod uppdaterad');
+    } catch (err) { showToast(err.message || 'Misslyckades'); }
+  });
+}
+
+function adminDelete() {
+  showConfirm('Radera hela gruppen och all dess data i molnet? Detta kan inte ångras.', async () => {
+    try {
+      await Groups.deleteGroup(unlockedAdminCode);
+      showToast('Gruppen raderad');
+      enterLocalMode();
+    } catch (err) { showToast(err.message || 'Misslyckades'); }
+  });
+}
+
+function adminRemoveMember(memberId) {
+  showConfirm('Ta bort medlemmen ur gruppen?', async () => {
+    try {
+      const snapshot = await Groups.removeMember(unlockedAdminCode, memberId);
+      lastGroupSnapshot = snapshot;
+      renderGroup();
+    } catch (err) { showToast(err.message || 'Misslyckades'); }
+  });
+}
+
+async function adminSetRole(memberId, role) {
+  try {
+    const snapshot = await Groups.setMemberRole(unlockedAdminCode, memberId, role);
+    lastGroupSnapshot = snapshot;
+    renderGroup();
+  } catch (err) { showToast(err.message || 'Misslyckades'); }
+}
+
+function leaveGroup() {
+  showConfirm('Lämna gruppen? Du kan logga in igen med gruppkoden. Gruppens data ligger kvar i molnet.', async () => {
+    try { await Groups.leave(); } catch { /* best effort */ }
+    enterLocalMode();
+    showToast('Du lämnade gruppen');
+  });
+}
+
+async function copyJoinCode() {
+  const code = Session.group?.joinCode || '';
+  try {
+    await navigator.clipboard.writeText(code);
+    showToast('Gruppkod kopierad');
+  } catch {
+    showToast(`Gruppkod: ${code}`);
   }
 }
 
@@ -1327,6 +1686,31 @@ function closeConfirm() {
   confirmCallback = null;
 }
 
+// ─── Input prompt dialog ──────────────────────────────────────────────────────
+let promptCallback = null;
+
+function showPrompt(message, options = {}, onSubmit) {
+  $('#input-dialog-text').textContent = message;
+  const field = $('#input-dialog-field');
+  field.value = options.value || '';
+  field.placeholder = options.placeholder || '';
+  promptCallback = onSubmit;
+  $('#input-dialog').classList.add('active');
+  setTimeout(() => field.focus(), 50);
+}
+
+function submitPrompt() {
+  const cb = promptCallback;
+  const value = $('#input-dialog-field').value;
+  closePrompt();
+  if (cb) cb(value);
+}
+
+function closePrompt() {
+  $('#input-dialog').classList.remove('active');
+  promptCallback = null;
+}
+
 // ─── Protocol question (low-stake round) ──────────────────────────────────────
 let protocolCallback = null;
 
@@ -1521,6 +1905,62 @@ function bindEvents() {
   // Swipe to dismiss bottom sheets
   addSwipeToDismiss($('.modal'), closeRoundModal);
   addSwipeToDismiss($('.card-picker'), closeCardPicker);
+
+  bindGroupEvents();
+}
+
+// ─── Group / welcome event binding ────────────────────────────────────────────
+function bindGroupEvents() {
+  // Welcome / mode selection
+  $('#btn-welcome-join').addEventListener('click', () => {
+    resetWelcomeForms();
+    $('#welcome-join-form').style.display = '';
+    $('#input-join-code').focus();
+  });
+  $('#btn-welcome-create').addEventListener('click', () => {
+    resetWelcomeForms();
+    $('#welcome-create-form').style.display = '';
+    $('#input-create-name').focus();
+  });
+  $('#btn-welcome-local').addEventListener('click', enterLocalMode);
+  $('#btn-do-join').addEventListener('click', doJoin);
+  $('#btn-do-create').addEventListener('click', doCreate);
+  $('#input-join-code').addEventListener('keydown', e => { if (e.key === 'Enter') doJoin(); });
+  $('#btn-welcome-back').addEventListener('click', () => {
+    if (Session.hasChosen()) { navigateTo('home', { replace: true }); screenStack.length = 0; }
+  });
+  $$('[data-welcome-cancel]').forEach(btn =>
+    btn.addEventListener('click', resetWelcomeForms));
+
+  // Mode bar (home) → open group screen or welcome
+  $('#mode-bar').addEventListener('click', (e) => {
+    if (!e.target.closest('#mode-bar-manage')) return;
+    if (Session.isGroup()) navigateTo('group');
+    else showWelcome();
+  });
+
+  // Input prompt dialog
+  $('#input-dialog-ok').addEventListener('click', submitPrompt);
+  $('#input-dialog-cancel').addEventListener('click', closePrompt);
+  $('#input-dialog-field').addEventListener('keydown', e => { if (e.key === 'Enter') submitPrompt(); });
+
+  // Group screen (delegated)
+  $('#group-content').addEventListener('click', (e) => {
+    if (e.target.closest('#btn-copy-code')) return copyJoinCode();
+    if (e.target.closest('#btn-group-refresh')) return refreshGroup(false);
+    if (e.target.closest('#btn-group-leave')) return leaveGroup();
+    if (e.target.closest('#btn-admin-unlock')) return unlockAdmin();
+    if (e.target.closest('#btn-admin-rename')) return adminRename();
+    if (e.target.closest('#btn-admin-regen')) return adminRegenCode();
+    if (e.target.closest('#btn-admin-setcode')) return adminSetCode();
+    if (e.target.closest('#btn-admin-delete')) return adminDelete();
+    const promote = e.target.closest('[data-promote]');
+    if (promote) return adminSetRole(promote.dataset.promote, 'admin');
+    const demote = e.target.closest('[data-demote]');
+    if (demote) return adminSetRole(demote.dataset.demote, 'member');
+    const removeMember = e.target.closest('[data-remove-member]');
+    if (removeMember) return adminRemoveMember(removeMember.dataset.removeMember);
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1529,10 +1969,24 @@ function bindEvents() {
 function init() {
   initCardPicker();
   bindEvents();
+  onSyncStatus(handleSyncStatus);
 
   // Restore active game if any
   activeGame = GameStore.getActive();
-  renderHome();
+
+  // Group mode: flush any pending changes and refresh from the central DB.
+  if (Session.isGroup()) {
+    Outbox.flush();
+    refreshGroup(true);
+    window.addEventListener('online', () => { Outbox.flush(); refreshGroup(true); });
+  }
+
+  // First run (or after leaving a group without choosing): show the mode picker.
+  if (SUPABASE_ENABLED && !Session.hasChosen()) {
+    showWelcome();
+  } else {
+    renderHome();
+  }
 }
 
 document.addEventListener('DOMContentLoaded', init);
