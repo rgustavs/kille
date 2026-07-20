@@ -164,7 +164,7 @@ begin
   s := lower(trim(coalesce(p_text, '')));
   -- Translitterera vanliga svenska/nordiska tecken.
   s := translate(s, 'åäàáâãöøòóôõüùúûñçéèêëíìîïý',
-                    'aaaaaaoooooouuuuncceeeeiiiiy');
+                    'aaaaaaoooooouuuunceeeeiiiiy');
   s := regexp_replace(s, '[^a-z0-9]+', '-', 'g');   -- allt annat → bindestreck
   s := regexp_replace(s, '-+', '-', 'g');           -- kollapsa bindestreck
   s := trim(both '-' from s);
