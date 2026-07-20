@@ -18,6 +18,9 @@
 -- skyddsnivå för ett sällskapsspel utan att kräva e-postinloggning.
 -- ═══════════════════════════════════════════════════════════════════════════
 
+-- pgcrypto ger crypt()/gen_salt() för lösenordshashning. På Supabase installeras
+-- den i schemat "extensions", därför har funktionerna nedan
+-- `search_path = public, extensions` så att crypt/gen_salt hittas.
 create extension if not exists pgcrypto;
 
 -- ─── Tabeller ────────────────────────────────────────────────────────────────
@@ -48,9 +51,13 @@ create table if not exists public.kille_group_members (
   group_id   uuid not null references public.kille_groups(id) on delete cascade,
   name       text not null,
   role       text not null default 'member' check (role in ('member', 'admin')),
-  created_at timestamptz not null default now(),
-  unique (group_id, lower(name))
+  created_at timestamptz not null default now()
 );
+
+-- Unikt medlemsnamn per grupp (skiftlägesokänsligt). Uttrycket kräver ett
+-- unikt index — det kan inte uttryckas som en vanlig UNIQUE-constraint.
+create unique index if not exists kille_group_members_group_name_key
+  on public.kille_group_members (group_id, lower(name));
 
 create table if not exists public.kille_group_players (
   id         text not null,
@@ -93,7 +100,7 @@ create or replace function public._kille_group_by_code(p_group_id uuid, p_join_c
 returns public.kille_groups
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   g public.kille_groups;
@@ -114,7 +121,7 @@ create or replace function public._kille_require_admin(p_group_id uuid, p_join_c
 returns public.kille_groups
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   g public.kille_groups;
@@ -133,7 +140,7 @@ create or replace function public._kille_generate_join_code()
 returns text
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   alphabet text := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -156,7 +163,7 @@ create or replace function public._kille_slugify(p_text text)
 returns text
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   s text;
@@ -164,7 +171,7 @@ begin
   s := lower(trim(coalesce(p_text, '')));
   -- Translitterera vanliga svenska/nordiska tecken.
   s := translate(s, 'åäàáâãöøòóôõüùúûñçéèêëíìîïý',
-                    'aaaaaaoooooouuuuncceeeeiiiiy');
+                    'aaaaaaoooooouuuunceeeeiiiiy');
   s := regexp_replace(s, '[^a-z0-9]+', '-', 'g');   -- allt annat → bindestreck
   s := regexp_replace(s, '-+', '-', 'g');           -- kollapsa bindestreck
   s := trim(both '-' from s);
@@ -178,7 +185,7 @@ create or replace function public._kille_unique_slug(p_name text)
 returns text
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   base text := public._kille_slugify(p_name);
@@ -198,7 +205,7 @@ create or replace function public._kille_snapshot(p_group_id uuid, p_role text d
 returns jsonb
 language sql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   select jsonb_build_object(
     'group', (
@@ -236,7 +243,7 @@ create or replace function public._kille_upsert_member(p_group_id uuid, p_name t
 returns text
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_name text := nullif(trim(coalesce(p_name, '')), '');
@@ -269,7 +276,7 @@ create or replace function public.kille_create_group(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_name text := nullif(trim(coalesce(p_name, '')), '');
@@ -309,7 +316,7 @@ create or replace function public.kille_get_group_by_slug(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   g public.kille_groups;
@@ -333,7 +340,7 @@ create or replace function public.kille_join_group(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   g public.kille_groups;
@@ -356,7 +363,7 @@ create or replace function public.kille_pull(p_group_id uuid, p_join_code text)
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   g public.kille_groups;
@@ -373,7 +380,7 @@ create or replace function public.kille_verify_admin(
 returns boolean
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   perform public._kille_require_admin(p_group_id, p_join_code, p_admin_code);
@@ -388,7 +395,7 @@ create or replace function public.kille_save_player(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   perform public._kille_group_by_code(p_group_id, p_join_code);
@@ -406,7 +413,7 @@ create or replace function public.kille_delete_player(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   perform public._kille_group_by_code(p_group_id, p_join_code);
@@ -422,7 +429,7 @@ create or replace function public.kille_save_game(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_id text := p_game->>'id';
@@ -446,7 +453,7 @@ create or replace function public.kille_delete_game(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   perform public._kille_group_by_code(p_group_id, p_join_code);
@@ -462,7 +469,7 @@ create or replace function public.kille_leave_group(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   perform public._kille_group_by_code(p_group_id, p_join_code);
@@ -479,7 +486,7 @@ create or replace function public.kille_admin_rename_group(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_name text := nullif(trim(coalesce(p_name, '')), '');
@@ -499,7 +506,7 @@ create or replace function public.kille_admin_remove_member(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   perform public._kille_require_admin(p_group_id, p_join_code, p_admin_code);
@@ -516,7 +523,7 @@ create or replace function public.kille_admin_set_member_role(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   perform public._kille_require_admin(p_group_id, p_join_code, p_admin_code);
@@ -537,7 +544,7 @@ create or replace function public.kille_admin_set_code(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_new text := nullif(trim(coalesce(p_new_admin_code, '')), '');
@@ -559,7 +566,7 @@ create or replace function public.kille_admin_regenerate_join_code(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_code text;
@@ -578,7 +585,7 @@ create or replace function public.kille_admin_delete_group(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   perform public._kille_require_admin(p_group_id, p_join_code, p_admin_code);
@@ -597,7 +604,7 @@ create or replace function public._kille_require_sa(p_username text, p_password 
 returns public.kille_admins
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   a public.kille_admins;
@@ -616,7 +623,7 @@ create or replace function public.kille_sa_exists()
 returns boolean
 language sql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$ select exists (select 1 from public.kille_admins); $$;
 
 -- Skapa den första super-adminen (fungerar bara om ingen finns ännu).
@@ -624,7 +631,7 @@ create or replace function public.kille_sa_bootstrap(p_username text, p_password
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_user text := lower(trim(coalesce(p_username, '')));
@@ -646,7 +653,7 @@ create or replace function public.kille_sa_login(p_username text, p_password tex
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare a public.kille_admins;
 begin
@@ -662,7 +669,7 @@ create or replace function public.kille_sa_add_admin(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare v_user text := lower(trim(coalesce(p_new_username, '')));
 begin
@@ -681,7 +688,7 @@ create or replace function public.kille_sa_list_groups(p_username text, p_passwo
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   perform public._kille_require_sa(p_username, p_password);
@@ -708,7 +715,7 @@ create or replace function public.kille_sa_create_group(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   perform public._kille_require_sa(p_username, p_password);
@@ -722,7 +729,7 @@ create or replace function public.kille_sa_rename_group(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare v_name text := nullif(trim(coalesce(p_name, '')), '');
 begin
@@ -739,7 +746,7 @@ create or replace function public.kille_sa_set_slug(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare v_slug text;
 begin
@@ -759,7 +766,7 @@ create or replace function public.kille_sa_regen_code(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare v_code text;
 begin
@@ -776,7 +783,7 @@ create or replace function public.kille_sa_delete_group(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   perform public._kille_require_sa(p_username, p_password);
@@ -792,7 +799,7 @@ create or replace function public.kille_sa_list_users(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   perform public._kille_require_sa(p_username, p_password);
@@ -815,7 +822,7 @@ create or replace function public.kille_sa_remove_member(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   perform public._kille_require_sa(p_username, p_password);
@@ -830,7 +837,7 @@ create or replace function public.kille_sa_remove_player(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   perform public._kille_require_sa(p_username, p_password);
