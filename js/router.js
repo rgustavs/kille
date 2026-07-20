@@ -30,6 +30,12 @@ export function groupUrl(slug) {
   return `${location.origin}/?g=${encodeURIComponent(slug)}`;
 }
 
+/** Länk till super-admin-konsolen. */
+export function adminUrl() {
+  if (typeof location === 'undefined') return '';
+  return `${location.origin}/?admin=1`;
+}
+
 /** Uppdatera adressfältet till gruppens URL utan att ladda om sidan. */
 export function setUrlForGroup(slug) {
   if (typeof history === 'undefined' || !slug) return;

@@ -15,7 +15,7 @@ import { $, $$, escHtml, avatarInitial, formatScore, showToast, addSwipeToDismis
 import { Session } from './session.js';
 import { Groups, SuperAdmin, Outbox, onSyncStatus } from './remote.js';
 import { SUPABASE_ENABLED } from './config.js';
-import { groupSlugFromUrl, isAdminUrl, groupUrl, setUrlForGroup, clearUrl } from './router.js';
+import { groupSlugFromUrl, isAdminUrl, groupUrl, adminUrl, setUrlForGroup, clearUrl } from './router.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STATE
@@ -376,7 +376,8 @@ function renderGroup() {
     <div class="panel mb-lg">
       <h3 class="panel__title">${escHtml(g.name)}</h3>
       <p class="field-hint">Dela gruppkoden med de som ska logga in. Synkstatus: <span id="group-sync-line">${syncDotHtml()}</span></p>
-      <label class="field-label">Gruppkod</label>
+      <button class="btn btn--gold btn--full" id="btn-invite">📨 Bjud in till grupp</button>
+      <label class="field-label" style="margin-top: var(--space-md)">Gruppkod</label>
       <div class="group-code-box">
         <span class="group-code-box__code">${escHtml(g.joinCode)}</span>
         <button class="group-code-box__copy" id="btn-copy-code">Kopiera</button>
@@ -510,6 +511,32 @@ function copyGroupUrl() {
   return copyText(groupUrl(Session.group?.slug), 'Grupp-URL');
 }
 
+// Open the native share sheet if available, otherwise copy to clipboard.
+async function shareOrCopy(url, shareData, label) {
+  if (url && typeof navigator !== 'undefined' && navigator.share) {
+    try { await navigator.share({ ...shareData, url }); return; }
+    catch (err) { if (err && err.name === 'AbortError') return; }
+  }
+  return copyText(url, label);
+}
+
+// "Bjud in till grupp" — share/copy the group's invite link.
+function inviteToGroup() {
+  const g = Session.group;
+  if (!g) return;
+  const url = groupUrl(g.slug);
+  if (!url) return copyText(`Gruppkod: ${g.joinCode}`, 'Gruppkod');
+  return shareOrCopy(url, {
+    title: 'Kille',
+    text: `Gå med i "${g.name}" på Kille`
+  }, 'Inbjudningslänk');
+}
+
+// Share/copy a link to the super-admin console.
+function shareAdminLink() {
+  return shareOrCopy(adminUrl(), { title: 'Kille super-admin', text: 'Kille super-admin' }, 'Admin-länk');
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // SUPER-ADMIN CONSOLE (login + password; manages all groups and users)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -552,6 +579,7 @@ function renderAdmin() {
         ${saExists === false
           ? '<p class="field-hint" style="margin-top: var(--space-sm)">Ingen admin finns ännu — skapa den första (lösenord minst 6 tecken).</p>'
           : ''}
+        <button class="btn btn--ghost btn--full" id="sa-share-link" style="margin-top: var(--space-md)">🔗 Kopiera/dela admin-länk</button>
       </div>`;
     return;
   }
@@ -582,6 +610,7 @@ function renderAdmin() {
         <span class="mode-bar__title">Inloggad: ${escHtml(saCred.username)}</span>
         <button class="mode-bar__btn" id="sa-logout">Logga ut</button>
       </div>
+      <button class="btn btn--ghost btn--full" id="sa-share-link" style="margin-top: var(--space-md)">🔗 Kopiera/dela admin-länk</button>
     </div>
 
     <div class="panel mb-lg">
@@ -2209,6 +2238,7 @@ function bindGroupEvents() {
 
   // Group screen (delegated)
   $('#group-content').addEventListener('click', (e) => {
+    if (e.target.closest('#btn-invite')) return inviteToGroup();
     if (e.target.closest('#btn-copy-code')) return copyJoinCode();
     if (e.target.closest('#btn-copy-url')) return copyGroupUrl();
     if (e.target.closest('#btn-group-refresh')) return refreshGroup(false);
@@ -2228,6 +2258,7 @@ function bindGroupEvents() {
 
   // Super-admin console (delegated)
   $('#admin-content').addEventListener('click', (e) => {
+    if (e.target.closest('#sa-share-link')) return shareAdminLink();
     if (e.target.closest('#sa-login')) return saLogin();
     if (e.target.closest('#sa-bootstrap')) return saBootstrap();
     if (e.target.closest('#sa-logout')) return saLogout();
