@@ -29,6 +29,73 @@
   <!-- ══════ Screens ══════ -->
   <main>
 
+    <!-- ── Welcome / mode selection ── -->
+    <section class="screen app-content" id="screen-welcome">
+      <div class="home-hero">
+        <span class="home-hero__icon">⚜</span>
+        <h2 class="home-hero__title">Kille</h2>
+        <p class="home-hero__subtitle">Välj hur du vill spela</p>
+      </div>
+      <div class="welcome-choices">
+        <button class="welcome-choice" id="btn-welcome-join">
+          <span class="welcome-choice__emoji">👥</span>
+          <span class="welcome-choice__body">
+            <span class="welcome-choice__title">Logga in i grupp</span>
+            <span class="welcome-choice__sub">Dela spelare, protokoll och statistik med din grupp</span>
+          </span>
+        </button>
+        <button class="welcome-choice" id="btn-welcome-create">
+          <span class="welcome-choice__emoji">✨</span>
+          <span class="welcome-choice__body">
+            <span class="welcome-choice__title">Skapa ny grupp</span>
+            <span class="welcome-choice__sub">Bli admin för en ny gemensam grupp</span>
+          </span>
+        </button>
+        <button class="welcome-choice" id="btn-welcome-local">
+          <span class="welcome-choice__emoji">📱</span>
+          <span class="welcome-choice__body">
+            <span class="welcome-choice__title">Arbeta lokalt</span>
+            <span class="welcome-choice__sub">Spara allt bara på den här enheten</span>
+          </span>
+        </button>
+      </div>
+
+      <!-- Join form -->
+      <div class="panel welcome-form" id="welcome-join-form" style="display:none">
+        <h3 class="panel__title">Logga in i grupp</h3>
+        <label class="field-label" for="input-join-code">Gruppkod</label>
+        <input type="text" class="input" id="input-join-code" placeholder="T.ex. ABC234" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false">
+        <label class="field-label" for="input-join-name">Ditt namn (valfritt)</label>
+        <input type="text" class="input" id="input-join-name" placeholder="Ditt namn i gruppen" maxlength="20" autocomplete="off">
+        <div class="flex-row welcome-form__actions">
+          <button class="btn btn--ghost" data-welcome-cancel>Avbryt</button>
+          <button class="btn btn--primary" id="btn-do-join">Logga in</button>
+        </div>
+      </div>
+
+      <!-- Create form -->
+      <div class="panel welcome-form" id="welcome-create-form" style="display:none">
+        <h3 class="panel__title">Skapa ny grupp</h3>
+        <label class="field-label" for="input-create-name">Gruppens namn</label>
+        <input type="text" class="input" id="input-create-name" placeholder="T.ex. Familjen Andersson" maxlength="40" autocomplete="off">
+        <label class="field-label" for="input-create-member">Ditt namn (valfritt)</label>
+        <input type="text" class="input" id="input-create-member" placeholder="Ditt namn" maxlength="20" autocomplete="off">
+        <label class="field-label" for="input-create-slug">Grupp-URL / slug (valfritt)</label>
+        <input type="text" class="input" id="input-create-slug" placeholder="gustavsson-and-friends" maxlength="60" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <p class="field-hint">Lämna tomt för att skapa automatiskt från gruppnamnet.</p>
+        <label class="field-label" for="input-create-admin">Admin-kod (hemlig, minst 4 tecken)</label>
+        <input type="text" class="input" id="input-create-admin" placeholder="Välj en admin-kod" maxlength="40" autocomplete="off">
+        <p class="field-hint">Admin-koden krävs för att administrera gruppen. Spara den säkert — den kan inte återställas.</p>
+        <div class="flex-row welcome-form__actions">
+          <button class="btn btn--ghost" data-welcome-cancel>Avbryt</button>
+          <button class="btn btn--gold" id="btn-do-create">Skapa grupp</button>
+        </div>
+      </div>
+
+      <button class="btn btn--ghost btn--full" id="btn-welcome-admin" style="margin-top: var(--space-lg);">🔐 Super-admin</button>
+      <button class="btn btn--ghost btn--full" id="btn-welcome-back" style="display:none; margin-top: var(--space-sm);">← Tillbaka</button>
+    </section>
+
     <!-- ── Home ── -->
     <section class="screen active app-content" id="screen-home">
       <div class="home-hero">
@@ -36,6 +103,7 @@
         <h2 class="home-hero__title">Kille</h2>
         <p class="home-hero__subtitle">Poängräknare för det klassiska kortspelet</p>
       </div>
+      <div class="mode-bar" id="mode-bar"></div>
       <div class="home-actions">
         <button class="btn btn--gold btn--full" id="btn-continue-game" style="display:none; margin-bottom: var(--space-md);">▶ Fortsätt Spel</button>
         <div class="home-action-grid">
@@ -189,6 +257,16 @@
       <div class="card-values__detail" id="card-values-detail"></div>
     </section>
 
+    <!-- ── Group management ── -->
+    <section class="screen app-content" id="screen-group">
+      <div id="group-content"></div>
+    </section>
+
+    <!-- ── Super-admin console ── -->
+    <section class="screen app-content" id="screen-admin">
+      <div id="admin-content"></div>
+    </section>
+
   </main>
 
   <!-- ══════ Round Entry Modal ══════ -->
@@ -278,6 +356,18 @@
       <div class="confirm-dialog__actions">
         <button class="btn btn--ghost" id="protocol-no">Nej, räkna inte</button>
         <button class="btn btn--primary" id="protocol-yes">Ja, protokollför</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════ Input Dialog (prompt) ══════ -->
+  <div class="confirm-dialog" id="input-dialog">
+    <div class="confirm-dialog__box">
+      <div class="confirm-dialog__text" id="input-dialog-text"></div>
+      <input type="text" class="input" id="input-dialog-field" autocomplete="off" style="margin-bottom: var(--space-md)">
+      <div class="confirm-dialog__actions">
+        <button class="btn btn--ghost" id="input-dialog-cancel">Avbryt</button>
+        <button class="btn btn--primary" id="input-dialog-ok">OK</button>
       </div>
     </div>
   </div>

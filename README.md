@@ -6,6 +6,7 @@ Designed to be resilient, it works fully offline via a Progressive Web App (PWA)
 
 ## Key Features
 
+- **Groups & shared central database**: On first launch you choose whether to **log in to a group** (shared roster, protocols and statistics via a central Supabase database) or **work locally** (everything stays on the device). Group members share a common game database in real time, and a **group admin** manages the group.
 - **2-8 Player Matches**: Manage player rosters with avatars and multi-game persistence.
 - **Automated Score Logic**: Handles Kille's unique zero-sum "pot" distribution, assigning the pot value to the winner and subtracting exact card values from losing players.
 - **Stand-by (Vilande) Mechanics**: Players can sit out during specific rounds, automatically registering a zero score for that round.
@@ -17,8 +18,8 @@ Designed to be resilient, it works fully offline via a Progressive Web App (PWA)
 - **Language**: Vanilla JavaScript (ES6+ Modules)
 - **Markup**: HTML5
 - **Styling**: Vanilla CSS3 (Custom Properties, Grid/Flexbox)
-- **Persistance**: `localStorage`
-- **Offline Capabilities**: Service Worker API & Web App Manifest
+- **Persistance**: `localStorage` (local mode) + **Supabase / PostgreSQL** (group mode)
+- **Offline Capabilities**: Service Worker API & Web App Manifest (group mode stays usable offline via a local cache + outgoing sync queue)
 
 ## Prerequisites
 
@@ -91,6 +92,69 @@ Follows a simple `navigateTo(screenId)` SPA pattern. Instead of a virtual DOM, i
 
 **4. PWA Pipeline (`sw.js` & `manifest.json`)**  
 Employs a "stale-while-revalidate" offline strategy. On installation, all UI core files (including card images) are precached. During subsequent loads, requests are served immediately from the Service Worker cache while a fresh copy is fetched in the background and stored for next time, allowing instant, offline boot-ups that still pick up updates.
+
+## Groups & Central Database (Supabase)
+
+The app runs in one of two modes, chosen on the start screen ("Vill du logga in i
+en grupp eller arbeta lokalt?"):
+
+- **Local mode** — all players, games and statistics live in `localStorage` on the
+  device only. No account, no network. This is the original behaviour.
+- **Group mode** — a group shares one central database. Any member can add players,
+  record games and see everyone's statistics. Data is cached locally so the app keeps
+  working offline; changes queue up and sync automatically when back online.
+
+Each group has its own **name and slug** (e.g. `gustavsson-and-friends`) and a
+**shareable URL** — `/?g=gustavsson-and-friends` (works on any static host) or the
+prettier `/g/gustavsson-and-friends` (Vercel rewrite, see `vercel.json`). Opening a
+group URL takes you straight into that group.
+
+### Roles
+
+- **Member** — logs in with the group's **join code** (or a group URL) and can
+  read/write the shared roster and games.
+- **Group admin** — additionally holds the group's secret **admin code** and can rename
+  the group, change its slug/URL, regenerate the join code, promote/remove members,
+  change the admin code, and delete the group. The person who creates a group becomes
+  its first admin.
+- **Super-admin** — a global operator with a **username + password** that manages *all*
+  groups and users from a console at `/?admin=1` (or `/admin`): create/rename/delete
+  groups, change slugs, regenerate codes, and remove members/players in any group. The
+  first super-admin is created (bootstrapped) from the login screen when none exists.
+
+### One-time setup
+
+1. Create a Supabase project (or use an existing one).
+2. Open the **SQL Editor** and run [`supabase/schema.sql`](supabase/schema.sql). It is
+   idempotent (all objects are prefixed `kille_`) and creates the tables, Row Level
+   Security policies and the `kille_*` RPC functions used by the client.
+3. Put your project's **URL** and **public anon key** in [`js/config.js`](js/config.js)
+   (or override per device via the `kille_supabase_url` / `kille_supabase_key`
+   `localStorage` keys). They can also be left at their committed defaults.
+4. *(Optional)* Seed the example group with
+   [`supabase/seed-gustavsson-and-friends.sql`](supabase/seed-gustavsson-and-friends.sql).
+   It creates the group `gustavsson-and-friends` and fills it with the players and games
+   from the exported data file, so that file's data belongs to that group. The admin
+   code is set to `CHANGE-ME-NOW` — change it in the app (Grupp → Administration → Byt
+   admin-kod) or from the super-admin console.
+
+> **Security:** the client only ever uses the **public anon key**. Never put the
+> `service_role` or `secret` key in the frontend. All tables have RLS enabled with no
+> direct anon access — every operation goes through `SECURITY DEFINER` functions that
+> require the group's `join_code` (and, for admin actions, the hashed `admin_code`).
+> This gives a sensible protection level for a party game without requiring e-mail
+> logins.
+
+### How it works in the client
+
+| File | Responsibility |
+| --- | --- |
+| `js/config.js` | Public Supabase URL + anon key |
+| `js/supabase.js` | Tiny dependency-free RPC client over `fetch` |
+| `js/session.js` | Tracks local vs. group mode and the current group/role/slug |
+| `js/router.js` | Reads the group slug / admin flag from the URL and builds shareable group URLs |
+| `js/remote.js` | Group login/admin + super-admin operations + an offline-tolerant outgoing sync queue (`Outbox`) |
+| `js/store.js` | Namespaced persistence: local keys vs. per-group keys, enqueuing changes to the central DB in group mode |
 
 ## Deployment
 
