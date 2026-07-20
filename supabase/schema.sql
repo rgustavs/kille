@@ -48,9 +48,13 @@ create table if not exists public.kille_group_members (
   group_id   uuid not null references public.kille_groups(id) on delete cascade,
   name       text not null,
   role       text not null default 'member' check (role in ('member', 'admin')),
-  created_at timestamptz not null default now(),
-  unique (group_id, lower(name))
+  created_at timestamptz not null default now()
 );
+
+-- Unikt medlemsnamn per grupp (skiftlägesokänsligt). Uttrycket kräver ett
+-- unikt index — det kan inte uttryckas som en vanlig UNIQUE-constraint.
+create unique index if not exists kille_group_members_group_name_key
+  on public.kille_group_members (group_id, lower(name));
 
 create table if not exists public.kille_group_players (
   id         text not null,
