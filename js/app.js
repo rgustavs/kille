@@ -13,8 +13,9 @@ import { GroupData } from './store.js';
 import { downloadExport, importFile } from './importexport.js';
 import { $, $$, escHtml, avatarInitial, formatScore, showToast, addSwipeToDismiss } from './dom.js';
 import { Session } from './session.js';
-import { Groups, Outbox, onSyncStatus } from './remote.js';
+import { Groups, SuperAdmin, Outbox, onSyncStatus } from './remote.js';
 import { SUPABASE_ENABLED } from './config.js';
+import { groupSlugFromUrl, isAdminUrl, groupUrl, setUrlForGroup, clearUrl } from './router.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STATE
@@ -80,11 +81,12 @@ function updateHeader(screenId) {
     'view-game': 'Spelprotokoll',
     stats: 'Statistik',
     cards: 'Kortvärden',
-    group: 'Grupp'
+    group: 'Grupp',
+    admin: 'Super-admin'
   };
   $('#header-title').textContent = titles[screenId] || 'Kille';
   const backBtn = $('#btn-back');
-  if (screenId === 'home') {
+  if (screenId === 'home' || screenId === 'welcome') {
     backBtn.classList.remove('visible');
   } else {
     backBtn.classList.add('visible');
@@ -103,6 +105,7 @@ function renderScreen(screenId) {
     case 'stats': renderStats(); break;
     case 'cards': renderCardValues(); break;
     case 'group': renderGroup(); break;
+    case 'admin': renderAdmin(); break;
     case 'view-game': break; // rendered when entering
   }
 }
@@ -197,12 +200,13 @@ function resetWelcomeForms() {
   $('#welcome-join-form').style.display = 'none';
   $('#welcome-create-form').style.display = 'none';
   ['#input-join-code', '#input-join-name', '#input-create-name',
-    '#input-create-member', '#input-create-admin'].forEach(sel => { $(sel).value = ''; });
+    '#input-create-member', '#input-create-slug', '#input-create-admin'].forEach(sel => { $(sel).value = ''; });
 }
 
 function enterLocalMode() {
   Session.setLocal();
   unlockedAdminCode = null;
+  clearUrl();
   PlayerStore.invalidate();
   GameStore.invalidate();
   activeGame = GameStore.getActive();
@@ -215,6 +219,7 @@ function enterGroupFromSnapshot(snapshot, memberName, adminUnlocked) {
   lastGroupSnapshot = snapshot;
   GroupData.hydrate(snapshot);
   activeGame = GameStore.getActive();
+  if (snapshot.group?.slug) setUrlForGroup(snapshot.group.slug);
   Outbox.flush();
   navigateTo('home', { replace: true });
   screenStack.length = 0;
@@ -240,25 +245,40 @@ async function doJoin() {
 async function doCreate() {
   const name = $('#input-create-name').value.trim();
   const member = $('#input-create-member').value.trim();
+  const slug = $('#input-create-slug').value.trim();
   const adminCode = $('#input-create-admin').value.trim();
   if (!name) { showToast('Ange ett gruppnamn'); return; }
   if (adminCode.length < 4) { showToast('Admin-koden måste vara minst 4 tecken'); return; }
   const btn = $('#btn-do-create');
   btn.disabled = true;
   try {
-    const snapshot = await Groups.create(name, adminCode, member);
+    const snapshot = await Groups.create(name, adminCode, member, slug);
     unlockedAdminCode = adminCode; // creator is unlocked immediately
     Session.setGroup(snapshot, member, true);
     lastGroupSnapshot = snapshot;
     GroupData.hydrate(snapshot);
     activeGame = GameStore.getActive();
+    if (snapshot.group?.slug) setUrlForGroup(snapshot.group.slug);
     navigateTo('home', { replace: true });
     screenStack.length = 0;
-    showToast(`Grupp skapad — kod ${snapshot.group.joinCode}`);
+    showToast(`Grupp skapad: ${snapshot.group.slug}`);
   } catch (err) {
     showToast(err.message || 'Kunde inte skapa grupp');
   } finally {
     btn.disabled = false;
+  }
+}
+
+// Enter a group directly from its slug URL (/?g=slug).
+async function enterGroupBySlug(slug) {
+  try {
+    const snapshot = await Groups.getBySlug(slug);
+    enterGroupFromSnapshot(snapshot, Session.memberName || null, false);
+    renderHome();
+  } catch (err) {
+    showToast(err.message || 'Kunde inte öppna gruppen');
+    if (!Session.hasChosen()) showWelcome();
+    else { navigateTo('home', { replace: true }); screenStack.length = 0; }
   }
 }
 
@@ -361,6 +381,12 @@ function renderGroup() {
         <span class="group-code-box__code">${escHtml(g.joinCode)}</span>
         <button class="group-code-box__copy" id="btn-copy-code">Kopiera</button>
       </div>
+      ${g.slug ? `
+      <label class="field-label">Grupp-URL</label>
+      <div class="group-url-box">
+        <span class="group-url-box__url">${escHtml(groupUrl(g.slug))}</span>
+        <button class="group-code-box__copy" id="btn-copy-url">Kopiera</button>
+      </div>` : ''}
       <div class="flex-row" style="gap: var(--space-sm); margin-top: var(--space-md)">
         <button class="btn btn--ghost btn--half" id="btn-group-refresh">↻ Uppdatera</button>
         <button class="btn btn--secondary btn--half" id="btn-group-leave">Lämna grupp</button>
@@ -467,14 +493,250 @@ function leaveGroup() {
   });
 }
 
-async function copyJoinCode() {
-  const code = Session.group?.joinCode || '';
+async function copyText(text, label) {
   try {
-    await navigator.clipboard.writeText(code);
-    showToast('Gruppkod kopierad');
+    await navigator.clipboard.writeText(text);
+    showToast(`${label} kopierad`);
   } catch {
-    showToast(`Gruppkod: ${code}`);
+    showToast(`${label}: ${text}`);
   }
+}
+
+function copyJoinCode() {
+  return copyText(Session.group?.joinCode || '', 'Gruppkod');
+}
+
+function copyGroupUrl() {
+  return copyText(groupUrl(Session.group?.slug), 'Grupp-URL');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SUPER-ADMIN CONSOLE (login + password; manages all groups and users)
+// ═══════════════════════════════════════════════════════════════════════════
+let saCred = null;        // in-memory { username, password } — never persisted
+let saExists = null;      // whether any super-admin is configured
+let saGroups = [];        // cached group list
+let saUsersView = null;   // { groupId, name, members, players } when viewing users
+
+async function openAdmin() {
+  screenStack.push(currentScreen);
+  currentScreen = 'admin';
+  $$('.screen').forEach(el => el.classList.remove('active'));
+  $('#screen-admin').classList.add('active');
+  updateHeader('admin');
+  window.scrollTo(0, 0);
+  if (saExists === null) {
+    try { saExists = await SuperAdmin.exists(); } catch { saExists = true; }
+  }
+  renderAdmin();
+}
+
+function renderAdmin() {
+  const c = $('#admin-content');
+  if (!saCred) {
+    c.innerHTML = `
+      <div class="panel">
+        <h3 class="panel__title">Super-admin</h3>
+        <p class="field-hint" style="margin-bottom: var(--space-md)">
+          Logga in för att hantera alla grupper och användare.</p>
+        <label class="field-label" for="sa-user">Användarnamn</label>
+        <input type="text" class="input" id="sa-user" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <label class="field-label" for="sa-pass">Lösenord</label>
+        <input type="password" class="input" id="sa-pass" autocomplete="off">
+        <div class="flex-row welcome-form__actions">
+          ${saExists === false
+            ? '<button class="btn btn--ghost" id="sa-bootstrap">Skapa första admin</button>'
+            : ''}
+          <button class="btn btn--primary" id="sa-login">Logga in</button>
+        </div>
+        ${saExists === false
+          ? '<p class="field-hint" style="margin-top: var(--space-sm)">Ingen admin finns ännu — skapa den första (lösenord minst 6 tecken).</p>'
+          : ''}
+      </div>`;
+    return;
+  }
+
+  const groupsHtml = saGroups.length ? saGroups.map(g => `
+    <div class="admin-group-item" data-group="${escHtml(g.id)}">
+      <div class="admin-group-item__head">
+        <span class="admin-group-item__name">${escHtml(g.name)}</span>
+        <span class="admin-group-item__slug">/${escHtml(g.slug || '—')}</span>
+      </div>
+      <div class="admin-group-item__meta">
+        ${g.members} medlemmar · ${g.players} spelare · ${g.games} spel · kod ${escHtml(g.joinCode)}
+      </div>
+      <div class="admin-group-item__actions">
+        <button class="member-item__action" data-sa-rename="${escHtml(g.id)}">Byt namn</button>
+        <button class="member-item__action" data-sa-slug="${escHtml(g.id)}">Byt slug</button>
+        <button class="member-item__action" data-sa-regen="${escHtml(g.id)}">Ny kod</button>
+        <button class="member-item__action" data-sa-users="${escHtml(g.id)}">Användare</button>
+        <button class="member-item__action member-item__action--danger" data-sa-delete="${escHtml(g.id)}">Radera</button>
+      </div>
+      ${renderAdminUsers(g.id)}
+    </div>`).join('')
+    : '<div class="empty-state"><div class="empty-state__text">Inga grupper ännu.</div></div>';
+
+  c.innerHTML = `
+    <div class="panel mb-lg">
+      <div class="flex-row" style="justify-content: space-between; align-items: center">
+        <span class="mode-bar__title">Inloggad: ${escHtml(saCred.username)}</span>
+        <button class="mode-bar__btn" id="sa-logout">Logga ut</button>
+      </div>
+    </div>
+
+    <div class="panel mb-lg">
+      <h3 class="panel__title">Skapa grupp</h3>
+      <label class="field-label" for="sa-new-name">Gruppnamn</label>
+      <input type="text" class="input" id="sa-new-name" autocomplete="off">
+      <label class="field-label" for="sa-new-slug">Slug (valfritt)</label>
+      <input type="text" class="input" id="sa-new-slug" placeholder="auto från namnet" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <label class="field-label" for="sa-new-code">Admin-kod (minst 4 tecken)</label>
+      <input type="text" class="input" id="sa-new-code" autocomplete="off">
+      <div class="flex-row welcome-form__actions">
+        <button class="btn btn--gold" id="sa-create">Skapa grupp</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3 class="panel__title">Grupper (${saGroups.length})</h3>
+      <div class="admin-group-list">${groupsHtml}</div>
+    </div>`;
+}
+
+function renderAdminUsers(groupId) {
+  if (!saUsersView || saUsersView.groupId !== groupId) return '';
+  const members = saUsersView.members.map(m => `
+    <li class="member-item">
+      <span class="member-item__name">${escHtml(m.name)}</span>
+      <span class="role-badge role-badge--${m.role === 'admin' ? 'admin' : 'member'}">${m.role === 'admin' ? 'Admin' : 'Medlem'}</span>
+      <button class="member-item__action member-item__action--danger" data-sa-rmuser="${escHtml(m.id)}">Ta bort</button>
+    </li>`).join('') || '<li class="field-hint">Inga medlemmar.</li>';
+  const players = saUsersView.players.map(p => `
+    <li class="member-item">
+      <span class="member-item__name">${escHtml(p.name)}</span>
+      <button class="member-item__action member-item__action--danger" data-sa-rmplayer="${escHtml(p.id)}">Ta bort</button>
+    </li>`).join('') || '<li class="field-hint">Inga spelare.</li>';
+  return `
+    <div class="admin-users">
+      <div class="field-label">Medlemmar</div>
+      <ul class="member-list">${members}</ul>
+      <div class="field-label">Spelare</div>
+      <ul class="member-list">${players}</ul>
+    </div>`;
+}
+
+async function saLoadGroups() {
+  try {
+    saGroups = await SuperAdmin.listGroups(saCred);
+    renderAdmin();
+  } catch (err) {
+    showToast(err.message || 'Kunde inte hämta grupper');
+    if (err.code === 'INVALID_ADMIN_LOGIN') { saCred = null; renderAdmin(); }
+  }
+}
+
+async function saLogin() {
+  const username = $('#sa-user').value.trim();
+  const password = $('#sa-pass').value;
+  try {
+    await SuperAdmin.login(username, password);
+    saCred = { username: username.toLowerCase(), password };
+    await saLoadGroups();
+  } catch (err) { showToast(err.message || 'Inloggning misslyckades'); }
+}
+
+async function saBootstrap() {
+  const username = $('#sa-user').value.trim();
+  const password = $('#sa-pass').value;
+  if (!username || password.length < 6) { showToast('Lösenord minst 6 tecken'); return; }
+  try {
+    await SuperAdmin.bootstrap(username, password);
+    saExists = true;
+    saCred = { username: username.toLowerCase(), password };
+    showToast('Admin skapad');
+    await saLoadGroups();
+  } catch (err) { showToast(err.message || 'Kunde inte skapa admin'); }
+}
+
+function saLogout() {
+  saCred = null;
+  saGroups = [];
+  saUsersView = null;
+  renderAdmin();
+}
+
+async function saCreateGroup() {
+  const name = $('#sa-new-name').value.trim();
+  const slug = $('#sa-new-slug').value.trim();
+  const code = $('#sa-new-code').value.trim();
+  if (!name) { showToast('Ange gruppnamn'); return; }
+  if (code.length < 4) { showToast('Admin-kod minst 4 tecken'); return; }
+  try {
+    const snap = await SuperAdmin.createGroup(saCred, name, code, slug);
+    showToast(`Skapade ${snap.group.slug}`);
+    await saLoadGroups();
+  } catch (err) { showToast(err.message || 'Kunde inte skapa grupp'); }
+}
+
+function saRename(id) {
+  const g = saGroups.find(x => x.id === id);
+  showPrompt('Nytt gruppnamn', { value: g?.name || '' }, async (name) => {
+    if (!name || !name.trim()) return;
+    try { await SuperAdmin.renameGroup(saCred, id, name.trim()); await saLoadGroups(); }
+    catch (err) { showToast(err.message || 'Misslyckades'); }
+  });
+}
+
+function saSetSlug(id) {
+  const g = saGroups.find(x => x.id === id);
+  showPrompt('Ny slug (URL)', { value: g?.slug || '' }, async (slug) => {
+    if (!slug || !slug.trim()) return;
+    try { const r = await SuperAdmin.setSlug(saCred, id, slug.trim()); showToast(`Slug: ${r.slug}`); await saLoadGroups(); }
+    catch (err) { showToast(err.message || 'Misslyckades'); }
+  });
+}
+
+function saRegen(id) {
+  showConfirm('Skapa ny gruppkod? Den gamla slutar fungera.', async () => {
+    try { const r = await SuperAdmin.regenCode(saCred, id); showToast(`Ny kod: ${r.joinCode}`); await saLoadGroups(); }
+    catch (err) { showToast(err.message || 'Misslyckades'); }
+  });
+}
+
+function saDelete(id) {
+  const g = saGroups.find(x => x.id === id);
+  showConfirm(`Radera gruppen "${g?.name || ''}" och all dess data? Kan inte ångras.`, async () => {
+    try { await SuperAdmin.deleteGroup(saCred, id); if (saUsersView?.groupId === id) saUsersView = null; await saLoadGroups(); }
+    catch (err) { showToast(err.message || 'Misslyckades'); }
+  });
+}
+
+async function saViewUsers(id) {
+  if (saUsersView?.groupId === id) { saUsersView = null; renderAdmin(); return; }
+  try {
+    const res = await SuperAdmin.listUsers(saCred, id);
+    saUsersView = { groupId: id, members: res.members || [], players: res.players || [] };
+    renderAdmin();
+  } catch (err) { showToast(err.message || 'Misslyckades'); }
+}
+
+async function saRemoveMember(memberId) {
+  if (!saUsersView) return;
+  try { await SuperAdmin.removeMember(saCred, saUsersView.groupId, memberId); await saViewUsersReload(); }
+  catch (err) { showToast(err.message || 'Misslyckades'); }
+}
+
+async function saRemovePlayer(playerId) {
+  if (!saUsersView) return;
+  try { await SuperAdmin.removePlayer(saCred, saUsersView.groupId, playerId); await saViewUsersReload(); }
+  catch (err) { showToast(err.message || 'Misslyckades'); }
+}
+
+async function saViewUsersReload() {
+  const id = saUsersView.groupId;
+  const res = await SuperAdmin.listUsers(saCred, id);
+  saUsersView = { groupId: id, members: res.members || [], players: res.players || [] };
+  await saLoadGroups();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1923,6 +2185,7 @@ function bindGroupEvents() {
     $('#input-create-name').focus();
   });
   $('#btn-welcome-local').addEventListener('click', enterLocalMode);
+  $('#btn-welcome-admin').addEventListener('click', openAdmin);
   $('#btn-do-join').addEventListener('click', doJoin);
   $('#btn-do-create').addEventListener('click', doCreate);
   $('#input-join-code').addEventListener('keydown', e => { if (e.key === 'Enter') doJoin(); });
@@ -1947,6 +2210,7 @@ function bindGroupEvents() {
   // Group screen (delegated)
   $('#group-content').addEventListener('click', (e) => {
     if (e.target.closest('#btn-copy-code')) return copyJoinCode();
+    if (e.target.closest('#btn-copy-url')) return copyGroupUrl();
     if (e.target.closest('#btn-group-refresh')) return refreshGroup(false);
     if (e.target.closest('#btn-group-leave')) return leaveGroup();
     if (e.target.closest('#btn-admin-unlock')) return unlockAdmin();
@@ -1960,6 +2224,24 @@ function bindGroupEvents() {
     if (demote) return adminSetRole(demote.dataset.demote, 'member');
     const removeMember = e.target.closest('[data-remove-member]');
     if (removeMember) return adminRemoveMember(removeMember.dataset.removeMember);
+  });
+
+  // Super-admin console (delegated)
+  $('#admin-content').addEventListener('click', (e) => {
+    if (e.target.closest('#sa-login')) return saLogin();
+    if (e.target.closest('#sa-bootstrap')) return saBootstrap();
+    if (e.target.closest('#sa-logout')) return saLogout();
+    if (e.target.closest('#sa-create')) return saCreateGroup();
+    const rename = e.target.closest('[data-sa-rename]'); if (rename) return saRename(rename.dataset.saRename);
+    const slug = e.target.closest('[data-sa-slug]'); if (slug) return saSetSlug(slug.dataset.saSlug);
+    const regen = e.target.closest('[data-sa-regen]'); if (regen) return saRegen(regen.dataset.saRegen);
+    const users = e.target.closest('[data-sa-users]'); if (users) return saViewUsers(users.dataset.saUsers);
+    const del = e.target.closest('[data-sa-delete]'); if (del) return saDelete(del.dataset.saDelete);
+    const rmUser = e.target.closest('[data-sa-rmuser]'); if (rmUser) return saRemoveMember(rmUser.dataset.saRmuser);
+    const rmPlayer = e.target.closest('[data-sa-rmplayer]'); if (rmPlayer) return saRemovePlayer(rmPlayer.dataset.saRmplayer);
+  });
+  $('#admin-content').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.target.id === 'sa-user' || e.target.id === 'sa-pass')) saLogin();
   });
 }
 
@@ -1977,12 +2259,22 @@ function init() {
   // Group mode: flush any pending changes and refresh from the central DB.
   if (Session.isGroup()) {
     Outbox.flush();
-    refreshGroup(true);
     window.addEventListener('online', () => { Outbox.flush(); refreshGroup(true); });
   }
 
-  // First run (or after leaving a group without choosing): show the mode picker.
-  if (SUPABASE_ENABLED && !Session.hasChosen()) {
+  // URL routing takes priority: /?admin=1 opens the console, /?g=<slug> a group.
+  const urlSlug = SUPABASE_ENABLED ? groupSlugFromUrl() : null;
+  if (SUPABASE_ENABLED && isAdminUrl()) {
+    renderHome();
+    openAdmin();
+  } else if (urlSlug && urlSlug !== Session.group?.slug) {
+    renderHome();
+    enterGroupBySlug(urlSlug);
+  } else if (Session.isGroup()) {
+    refreshGroup(true);
+    renderHome();
+  } else if (SUPABASE_ENABLED && !Session.hasChosen()) {
+    // First run (or after leaving a group without choosing): show the mode picker.
     showWelcome();
   } else {
     renderHome();

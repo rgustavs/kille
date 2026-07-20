@@ -104,13 +104,23 @@ en grupp eller arbeta lokalt?"):
   record games and see everyone's statistics. Data is cached locally so the app keeps
   working offline; changes queue up and sync automatically when back online.
 
+Each group has its own **name and slug** (e.g. `gustavsson-and-friends`) and a
+**shareable URL** — `/?g=gustavsson-and-friends` (works on any static host) or the
+prettier `/g/gustavsson-and-friends` (Vercel rewrite, see `vercel.json`). Opening a
+group URL takes you straight into that group.
+
 ### Roles
 
-- **Member** — logs in with the group's **join code**, and can read/write the shared
-  roster and games.
-- **Admin** — additionally holds the group's secret **admin code** and can rename the
-  group, regenerate the join code, promote/remove members, change the admin code, and
-  delete the group. The person who creates a group becomes its first admin.
+- **Member** — logs in with the group's **join code** (or a group URL) and can
+  read/write the shared roster and games.
+- **Group admin** — additionally holds the group's secret **admin code** and can rename
+  the group, change its slug/URL, regenerate the join code, promote/remove members,
+  change the admin code, and delete the group. The person who creates a group becomes
+  its first admin.
+- **Super-admin** — a global operator with a **username + password** that manages *all*
+  groups and users from a console at `/?admin=1` (or `/admin`): create/rename/delete
+  groups, change slugs, regenerate codes, and remove members/players in any group. The
+  first super-admin is created (bootstrapped) from the login screen when none exists.
 
 ### One-time setup
 
@@ -121,6 +131,12 @@ en grupp eller arbeta lokalt?"):
 3. Put your project's **URL** and **public anon key** in [`js/config.js`](js/config.js)
    (or override per device via the `kille_supabase_url` / `kille_supabase_key`
    `localStorage` keys). They can also be left at their committed defaults.
+4. *(Optional)* Seed the example group with
+   [`supabase/seed-gustavsson-and-friends.sql`](supabase/seed-gustavsson-and-friends.sql).
+   It creates the group `gustavsson-and-friends` and fills it with the players and games
+   from the exported data file, so that file's data belongs to that group. The admin
+   code is set to `CHANGE-ME-NOW` — change it in the app (Grupp → Administration → Byt
+   admin-kod) or from the super-admin console.
 
 > **Security:** the client only ever uses the **public anon key**. Never put the
 > `service_role` or `secret` key in the frontend. All tables have RLS enabled with no
@@ -135,8 +151,9 @@ en grupp eller arbeta lokalt?"):
 | --- | --- |
 | `js/config.js` | Public Supabase URL + anon key |
 | `js/supabase.js` | Tiny dependency-free RPC client over `fetch` |
-| `js/session.js` | Tracks local vs. group mode and the current group/role |
-| `js/remote.js` | Group login/admin operations + an offline-tolerant outgoing sync queue (`Outbox`) |
+| `js/session.js` | Tracks local vs. group mode and the current group/role/slug |
+| `js/router.js` | Reads the group slug / admin flag from the URL and builds shareable group URLs |
+| `js/remote.js` | Group login/admin + super-admin operations + an offline-tolerant outgoing sync queue (`Outbox`) |
 | `js/store.js` | Namespaced persistence: local keys vs. per-group keys, enqueuing changes to the central DB in group mode |
 
 ## Deployment

@@ -11,10 +11,12 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 const FRIENDLY_ERRORS = {
   INVALID_GROUP_OR_CODE: 'Fel gruppkod — kontrollera koden och försök igen.',
   INVALID_ADMIN_CODE: 'Fel admin-kod.',
-  ADMIN_CODE_TOO_SHORT: 'Admin-koden måste vara minst 4 tecken.',
+  ADMIN_CODE_TOO_SHORT: 'Koden måste vara minst 4 tecken (lösenord minst 6).',
   GROUP_NAME_REQUIRED: 'Gruppen måste ha ett namn.',
   GAME_ID_REQUIRED: 'Spelet saknar id.',
-  INVALID_ROLE: 'Ogiltig roll.'
+  INVALID_ROLE: 'Ogiltig roll.',
+  INVALID_ADMIN_LOGIN: 'Fel användarnamn eller lösenord.',
+  ADMIN_ALREADY_EXISTS: 'En administratör finns redan.'
 };
 
 export class RpcError extends Error {

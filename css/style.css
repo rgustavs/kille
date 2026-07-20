@@ -2813,3 +2813,58 @@ body {
 }
 
 .group-danger { color: var(--red-500); }
+
+/* ─── Group URL box & super-admin console ──────────────────────────────────── */
+.group-url-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--cream-100);
+  border: 1px solid var(--cream-300);
+  border-radius: var(--radius-md);
+  margin-top: var(--space-sm);
+}
+.group-url-box__url {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+
+.admin-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+.admin-group-item {
+  padding: var(--space-md);
+  background: var(--cream-50);
+  border: 1px solid var(--cream-300);
+  border-radius: var(--radius-md);
+}
+.admin-group-item__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+.admin-group-item__name { font-weight: 700; color: var(--text-primary); }
+.admin-group-item__slug { font-size: 0.8rem; color: var(--green-600); }
+.admin-group-item__meta {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin: var(--space-xs) 0 var(--space-sm);
+}
+.admin-group-item__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+.admin-users {
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px dashed var(--cream-400);
+}
+.admin-users .member-list { margin-bottom: var(--space-sm); }

@@ -81,7 +81,7 @@ export const Session = {
       : null;
     this._state = {
       mode: 'group',
-      group: { id: g.id, name: g.name, joinCode: g.joinCode, role: (me?.role) || snapshot.role || 'member' },
+      group: { id: g.id, name: g.name, slug: g.slug || null, joinCode: g.joinCode, role: (me?.role) || snapshot.role || 'member' },
       memberId: me?.id || null,
       memberName: memberName || null,
       adminUnlocked: !!adminUnlocked

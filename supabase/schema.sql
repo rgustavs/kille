@@ -25,9 +25,22 @@ create extension if not exists pgcrypto;
 create table if not exists public.kille_groups (
   id              uuid primary key default gen_random_uuid(),
   name            text not null,
+  slug            text unique,
   join_code       text not null unique,
   admin_code_hash text not null,
   created_at      timestamptz not null default now()
+);
+
+-- Idempotent för databaser som skapades innan slug fanns.
+alter table public.kille_groups add column if not exists slug text;
+create unique index if not exists kille_groups_slug_key on public.kille_groups (slug);
+
+-- Globala administratörer (super-admin) som hanterar alla grupper och användare.
+create table if not exists public.kille_admins (
+  id            uuid primary key default gen_random_uuid(),
+  username      text not null unique,
+  password_hash text not null,
+  created_at    timestamptz not null default now()
 );
 
 create table if not exists public.kille_group_members (
@@ -63,11 +76,13 @@ alter table public.kille_groups          enable row level security;
 alter table public.kille_group_members   enable row level security;
 alter table public.kille_group_players   enable row level security;
 alter table public.kille_group_games     enable row level security;
+alter table public.kille_admins          enable row level security;
 
 revoke all on public.kille_groups        from anon, authenticated;
 revoke all on public.kille_group_members from anon, authenticated;
 revoke all on public.kille_group_players from anon, authenticated;
 revoke all on public.kille_group_games   from anon, authenticated;
+revoke all on public.kille_admins        from anon, authenticated;
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- Interna hjälpfunktioner
@@ -136,6 +151,48 @@ begin
 end;
 $$;
 
+-- Gör om ett gruppnamn till en URL-vänlig slug (t.ex. "gustavsson-and-friends").
+create or replace function public._kille_slugify(p_text text)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  s text;
+begin
+  s := lower(trim(coalesce(p_text, '')));
+  -- Translitterera vanliga svenska/nordiska tecken.
+  s := translate(s, 'åäàáâãöøòóôõüùúûñçéèêëíìîïý',
+                    'aaaaaaoooooouuuuncceeeeiiiiy');
+  s := regexp_replace(s, '[^a-z0-9]+', '-', 'g');   -- allt annat → bindestreck
+  s := regexp_replace(s, '-+', '-', 'g');           -- kollapsa bindestreck
+  s := trim(both '-' from s);
+  if s = '' then s := 'grupp'; end if;
+  return s;
+end;
+$$;
+
+-- Skapar en unik slug utifrån ett namn (lägger till -2, -3 … vid krock).
+create or replace function public._kille_unique_slug(p_name text)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  base text := public._kille_slugify(p_name);
+  candidate text := base;
+  n int := 1;
+begin
+  while exists (select 1 from public.kille_groups where slug = candidate) loop
+    n := n + 1;
+    candidate := base || '-' || n;
+  end loop;
+  return candidate;
+end;
+$$;
+
 -- Bygger en komplett ögonblicksbild av en grupp (för login/pull).
 create or replace function public._kille_snapshot(p_group_id uuid, p_role text default 'member')
 returns jsonb
@@ -148,6 +205,7 @@ as $$
       select jsonb_build_object(
         'id', g.id,
         'name', g.name,
+        'slug', g.slug,
         'joinCode', g.join_code,
         'createdAt', g.created_at
       )
@@ -205,7 +263,8 @@ $$;
 create or replace function public.kille_create_group(
   p_name text,
   p_admin_code text,
-  p_member_name text default null
+  p_member_name text default null,
+  p_slug text default null
 )
 returns jsonb
 language plpgsql
@@ -215,6 +274,7 @@ as $$
 declare
   v_name text := nullif(trim(coalesce(p_name, '')), '');
   v_code text := nullif(trim(coalesce(p_admin_code, '')), '');
+  v_slug text;
   g public.kille_groups;
 begin
   if v_name is null then
@@ -224,13 +284,44 @@ begin
     raise exception 'ADMIN_CODE_TOO_SHORT' using errcode = '22023';
   end if;
 
-  insert into public.kille_groups (name, join_code, admin_code_hash)
-  values (v_name, public._kille_generate_join_code(), crypt(v_code, gen_salt('bf')))
+  -- Slug: använd önskad om ledig, annars härled unik från namnet.
+  v_slug := nullif(public._kille_slugify(coalesce(p_slug, '')), 'grupp');
+  if v_slug is null or exists (select 1 from public.kille_groups where slug = v_slug) then
+    v_slug := public._kille_unique_slug(coalesce(nullif(p_slug, ''), v_name));
+  end if;
+
+  insert into public.kille_groups (name, slug, join_code, admin_code_hash)
+  values (v_name, v_slug, public._kille_generate_join_code(), crypt(v_code, gen_salt('bf')))
   returning * into g;
 
   perform public._kille_upsert_member(g.id, p_member_name, 'admin');
 
   return public._kille_snapshot(g.id, 'admin');
+end;
+$$;
+
+-- Hämta en grupp via dess slug (används för URL-åtkomst /?g=slug).
+-- Registrerar valfritt ett medlemsnamn, precis som kille_join_group.
+create or replace function public.kille_get_group_by_slug(
+  p_slug text,
+  p_member_name text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  g public.kille_groups;
+  v_role text := 'member';
+begin
+  select * into g from public.kille_groups
+  where slug = public._kille_slugify(coalesce(p_slug, ''));
+  if not found then
+    raise exception 'INVALID_GROUP_OR_CODE' using errcode = '28000';
+  end if;
+  v_role := coalesce(public._kille_upsert_member(g.id, p_member_name, 'member'), 'member');
+  return public._kille_snapshot(g.id, v_role);
 end;
 $$;
 
@@ -496,6 +587,258 @@ begin
 end;
 $$;
 
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Super-admin: global inloggning (användarnamn + lösenord) som hanterar
+-- alla grupper och användare. Prefix kille_sa_.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- Verifierar super-admin-uppgifter, annars fel.
+create or replace function public._kille_require_sa(p_username text, p_password text)
+returns public.kille_admins
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  a public.kille_admins;
+begin
+  select * into a from public.kille_admins
+  where username = lower(trim(coalesce(p_username, '')));
+  if not found or a.password_hash <> crypt(coalesce(p_password, ''), a.password_hash) then
+    raise exception 'INVALID_ADMIN_LOGIN' using errcode = '28000';
+  end if;
+  return a;
+end;
+$$;
+
+-- Finns någon super-admin uppsatt ännu? (publikt — avslöjar inget känsligt)
+create or replace function public.kille_sa_exists()
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$ select exists (select 1 from public.kille_admins); $$;
+
+-- Skapa den första super-adminen (fungerar bara om ingen finns ännu).
+create or replace function public.kille_sa_bootstrap(p_username text, p_password text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user text := lower(trim(coalesce(p_username, '')));
+begin
+  if exists (select 1 from public.kille_admins) then
+    raise exception 'ADMIN_ALREADY_EXISTS' using errcode = '42501';
+  end if;
+  if v_user = '' or length(coalesce(p_password, '')) < 6 then
+    raise exception 'ADMIN_CODE_TOO_SHORT' using errcode = '22023';
+  end if;
+  insert into public.kille_admins (username, password_hash)
+  values (v_user, crypt(p_password, gen_salt('bf')));
+  return jsonb_build_object('ok', true, 'username', v_user);
+end;
+$$;
+
+-- Logga in som super-admin.
+create or replace function public.kille_sa_login(p_username text, p_password text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare a public.kille_admins;
+begin
+  a := public._kille_require_sa(p_username, p_password);
+  return jsonb_build_object('ok', true, 'username', a.username);
+end;
+$$;
+
+-- Lägg till ytterligare en super-admin.
+create or replace function public.kille_sa_add_admin(
+  p_username text, p_password text, p_new_username text, p_new_password text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare v_user text := lower(trim(coalesce(p_new_username, '')));
+begin
+  perform public._kille_require_sa(p_username, p_password);
+  if v_user = '' or length(coalesce(p_new_password, '')) < 6 then
+    raise exception 'ADMIN_CODE_TOO_SHORT' using errcode = '22023';
+  end if;
+  insert into public.kille_admins (username, password_hash)
+  values (v_user, crypt(p_new_password, gen_salt('bf')));
+  return jsonb_build_object('ok', true, 'username', v_user);
+end;
+$$;
+
+-- Lista alla grupper med räknare (för super-admin-konsolen).
+create or replace function public.kille_sa_list_groups(p_username text, p_password text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform public._kille_require_sa(p_username, p_password);
+  return coalesce((
+    select jsonb_agg(jsonb_build_object(
+      'id', g.id,
+      'name', g.name,
+      'slug', g.slug,
+      'joinCode', g.join_code,
+      'createdAt', g.created_at,
+      'members', (select count(*) from public.kille_group_members m where m.group_id = g.id),
+      'players', (select count(*) from public.kille_group_players p where p.group_id = g.id),
+      'games',   (select count(*) from public.kille_group_games gm where gm.group_id = g.id)
+    ) order by g.created_at desc)
+    from public.kille_groups g
+  ), '[]'::jsonb);
+end;
+$$;
+
+-- Skapa en grupp som super-admin.
+create or replace function public.kille_sa_create_group(
+  p_username text, p_password text, p_name text, p_admin_code text, p_slug text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform public._kille_require_sa(p_username, p_password);
+  return public.kille_create_group(p_name, p_admin_code, null, p_slug);
+end;
+$$;
+
+create or replace function public.kille_sa_rename_group(
+  p_username text, p_password text, p_group_id uuid, p_name text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare v_name text := nullif(trim(coalesce(p_name, '')), '');
+begin
+  perform public._kille_require_sa(p_username, p_password);
+  if v_name is null then raise exception 'GROUP_NAME_REQUIRED' using errcode = '22023'; end if;
+  update public.kille_groups set name = v_name where id = p_group_id;
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
+create or replace function public.kille_sa_set_slug(
+  p_username text, p_password text, p_group_id uuid, p_slug text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare v_slug text;
+begin
+  perform public._kille_require_sa(p_username, p_password);
+  v_slug := public._kille_slugify(coalesce(p_slug, ''));
+  if exists (select 1 from public.kille_groups where slug = v_slug and id <> p_group_id) then
+    v_slug := public._kille_unique_slug(p_slug);
+  end if;
+  update public.kille_groups set slug = v_slug where id = p_group_id;
+  return jsonb_build_object('slug', v_slug);
+end;
+$$;
+
+create or replace function public.kille_sa_regen_code(
+  p_username text, p_password text, p_group_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare v_code text;
+begin
+  perform public._kille_require_sa(p_username, p_password);
+  v_code := public._kille_generate_join_code();
+  update public.kille_groups set join_code = v_code where id = p_group_id;
+  return jsonb_build_object('joinCode', v_code);
+end;
+$$;
+
+create or replace function public.kille_sa_delete_group(
+  p_username text, p_password text, p_group_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform public._kille_require_sa(p_username, p_password);
+  delete from public.kille_groups where id = p_group_id;
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
+-- Lista medlemmar + spelare i en grupp (för användarhantering).
+create or replace function public.kille_sa_list_users(
+  p_username text, p_password text, p_group_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform public._kille_require_sa(p_username, p_password);
+  return jsonb_build_object(
+    'members', coalesce((
+      select jsonb_agg(jsonb_build_object('id', m.id, 'name', m.name, 'role', m.role)
+        order by m.role desc, m.created_at)
+      from public.kille_group_members m where m.group_id = p_group_id), '[]'::jsonb),
+    'players', coalesce((
+      select jsonb_agg(jsonb_build_object('id', p.id, 'name', p.name)
+        order by p.created_at)
+      from public.kille_group_players p where p.group_id = p_group_id), '[]'::jsonb)
+  );
+end;
+$$;
+
+create or replace function public.kille_sa_remove_member(
+  p_username text, p_password text, p_group_id uuid, p_member_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform public._kille_require_sa(p_username, p_password);
+  delete from public.kille_group_members where group_id = p_group_id and id = p_member_id;
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
+create or replace function public.kille_sa_remove_player(
+  p_username text, p_password text, p_group_id uuid, p_player_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform public._kille_require_sa(p_username, p_password);
+  delete from public.kille_group_players where group_id = p_group_id and id = p_player_id;
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
 -- ─── Rättigheter ─────────────────────────────────────────────────────────────
 -- Endast EXECUTE på de publika RPC-funktionerna ges till anon. Interna
 -- hjälpfunktioner (_kille_*) exponeras inte.
@@ -505,12 +848,16 @@ revoke all on function
   public._kille_require_admin(uuid, text, text),
   public._kille_generate_join_code(),
   public._kille_snapshot(uuid, text),
-  public._kille_upsert_member(uuid, text, text)
+  public._kille_upsert_member(uuid, text, text),
+  public._kille_slugify(text),
+  public._kille_unique_slug(text),
+  public._kille_require_sa(text, text)
 from anon, authenticated;
 
 grant execute on function
-  public.kille_create_group(text, text, text),
+  public.kille_create_group(text, text, text, text),
   public.kille_join_group(text, text),
+  public.kille_get_group_by_slug(text, text),
   public.kille_pull(uuid, text),
   public.kille_verify_admin(uuid, text, text),
   public.kille_save_player(uuid, text, text, text),
@@ -524,4 +871,20 @@ grant execute on function
   public.kille_admin_set_code(uuid, text, text, text),
   public.kille_admin_regenerate_join_code(uuid, text, text),
   public.kille_admin_delete_group(uuid, text, text)
+to anon, authenticated;
+
+grant execute on function
+  public.kille_sa_exists(),
+  public.kille_sa_bootstrap(text, text),
+  public.kille_sa_login(text, text),
+  public.kille_sa_add_admin(text, text, text, text),
+  public.kille_sa_list_groups(text, text),
+  public.kille_sa_create_group(text, text, text, text, text),
+  public.kille_sa_rename_group(text, text, uuid, text),
+  public.kille_sa_set_slug(text, text, uuid, text),
+  public.kille_sa_regen_code(text, text, uuid),
+  public.kille_sa_delete_group(text, text, uuid),
+  public.kille_sa_list_users(text, text, uuid),
+  public.kille_sa_remove_member(text, text, uuid, uuid),
+  public.kille_sa_remove_player(text, text, uuid, text)
 to anon, authenticated;

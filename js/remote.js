@@ -13,15 +13,21 @@ import { Session } from './session.js';
 // ─── Login & admin ────────────────────────────────────────────────────────────
 
 export const Groups = {
-  create(name, adminCode, memberName) {
+  create(name, adminCode, memberName, slug) {
     return rpc('kille_create_group', {
-      p_name: name, p_admin_code: adminCode, p_member_name: memberName || null
+      p_name: name, p_admin_code: adminCode, p_member_name: memberName || null, p_slug: slug || null
     });
   },
 
   join(joinCode, memberName) {
     return rpc('kille_join_group', {
       p_join_code: joinCode, p_member_name: memberName || null
+    });
+  },
+
+  getBySlug(slug, memberName) {
+    return rpc('kille_get_group_by_slug', {
+      p_slug: slug, p_member_name: memberName || null
     });
   },
 
@@ -85,6 +91,70 @@ export const Groups = {
     if (!g || !Session.memberId) return Promise.resolve({ ok: true });
     return rpc('kille_leave_group', {
       p_group_id: g.id, p_join_code: g.joinCode, p_member_id: Session.memberId
+    });
+  }
+};
+
+// ─── Super-admin (global inloggning med användarnamn + lösenord) ───────────────
+
+export const SuperAdmin = {
+  exists() {
+    return rpc('kille_sa_exists');
+  },
+  bootstrap(username, password) {
+    return rpc('kille_sa_bootstrap', { p_username: username, p_password: password });
+  },
+  login(username, password) {
+    return rpc('kille_sa_login', { p_username: username, p_password: password });
+  },
+  addAdmin(cred, newUsername, newPassword) {
+    return rpc('kille_sa_add_admin', {
+      p_username: cred.username, p_password: cred.password,
+      p_new_username: newUsername, p_new_password: newPassword
+    });
+  },
+  listGroups(cred) {
+    return rpc('kille_sa_list_groups', { p_username: cred.username, p_password: cred.password });
+  },
+  createGroup(cred, name, adminCode, slug) {
+    return rpc('kille_sa_create_group', {
+      p_username: cred.username, p_password: cred.password,
+      p_name: name, p_admin_code: adminCode, p_slug: slug || null
+    });
+  },
+  renameGroup(cred, groupId, name) {
+    return rpc('kille_sa_rename_group', {
+      p_username: cred.username, p_password: cred.password, p_group_id: groupId, p_name: name
+    });
+  },
+  setSlug(cred, groupId, slug) {
+    return rpc('kille_sa_set_slug', {
+      p_username: cred.username, p_password: cred.password, p_group_id: groupId, p_slug: slug
+    });
+  },
+  regenCode(cred, groupId) {
+    return rpc('kille_sa_regen_code', {
+      p_username: cred.username, p_password: cred.password, p_group_id: groupId
+    });
+  },
+  deleteGroup(cred, groupId) {
+    return rpc('kille_sa_delete_group', {
+      p_username: cred.username, p_password: cred.password, p_group_id: groupId
+    });
+  },
+  listUsers(cred, groupId) {
+    return rpc('kille_sa_list_users', {
+      p_username: cred.username, p_password: cred.password, p_group_id: groupId
+    });
+  },
+  removeMember(cred, groupId, memberId) {
+    return rpc('kille_sa_remove_member', {
+      p_username: cred.username, p_password: cred.password, p_group_id: groupId, p_member_id: memberId
+    });
+  },
+  removePlayer(cred, groupId, playerId) {
+    return rpc('kille_sa_remove_player', {
+      p_username: cred.username, p_password: cred.password, p_group_id: groupId, p_player_id: playerId
     });
   }
 };

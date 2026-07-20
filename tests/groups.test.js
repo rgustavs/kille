@@ -30,11 +30,12 @@ async function runTests() {
 
   const { Session } = await import('../js/session.js');
   const { PlayerStore, GameStore, GroupData } = await import('../js/store.js');
-  const { Outbox } = await import('../js/remote.js');
+  const { Outbox, Groups, SuperAdmin } = await import('../js/remote.js');
   const { rpc, RpcError } = await import('../js/supabase.js');
+  const { slugify } = await import('../js/router.js');
 
   const snapshot = {
-    group: { id: 'G1', name: 'Testgruppen', joinCode: 'ABC234' },
+    group: { id: 'G1', name: 'Testgruppen', slug: 'testgruppen', joinCode: 'ABC234' },
     role: 'admin',
     members: [{ id: 'm1', name: 'Rasmus', role: 'admin' }],
     players: [],
@@ -112,6 +113,45 @@ async function runTests() {
     assert.ok(/gruppkod/i.test(caught.message));
     console.log('✅ rpc error mapping passes');
   } catch (err) { failures++; console.error('❌ rpc error mapping failed', err); }
+
+  // Test: slugify producerar URL-vänliga slugs (inkl. svenska tecken).
+  try {
+    assert.strictEqual(slugify('Gustavsson and Friends'), 'gustavsson-and-friends');
+    assert.strictEqual(slugify('Familjen Öström!'), 'familjen-ostrom');
+    assert.strictEqual(slugify('  Åäö  test  '), 'aao-test');
+    console.log('✅ slugify passes');
+  } catch (err) { failures++; console.error('❌ slugify failed', err); }
+
+  // Test: session sparar slug och grupp-URL kan härledas.
+  try {
+    Session.setGroup(snapshot, 'Rasmus', true);
+    assert.strictEqual(Session.group.slug, 'testgruppen');
+    console.log('✅ session stores slug passes');
+  } catch (err) { failures++; console.error('❌ session stores slug failed', err); }
+
+  // Test: getBySlug och super-admin-anrop mappar till rätt RPC + parametrar.
+  try {
+    fetchMode = 'ok';
+    fetchCalls.length = 0;
+    await Groups.getBySlug('gustavsson-and-friends', 'Richard');
+    const bySlug = fetchCalls.find(c => c.url.endsWith('/kille_get_group_by_slug'));
+    assert.ok(bySlug, 'kille_get_group_by_slug anropad');
+    assert.strictEqual(bySlug.body.p_slug, 'gustavsson-and-friends');
+
+    fetchCalls.length = 0;
+    await SuperAdmin.login('admin', 'hemligt');
+    assert.ok(fetchCalls.find(c => c.url.endsWith('/kille_sa_login')), 'kille_sa_login anropad');
+
+    const cred = { username: 'admin', password: 'hemligt' };
+    fetchCalls.length = 0;
+    await SuperAdmin.createGroup(cred, 'Nya Gänget', 'kod1234', 'nya-ganget');
+    const create = fetchCalls.find(c => c.url.endsWith('/kille_sa_create_group'));
+    assert.ok(create, 'kille_sa_create_group anropad');
+    assert.strictEqual(create.body.p_name, 'Nya Gänget');
+    assert.strictEqual(create.body.p_slug, 'nya-ganget');
+    assert.strictEqual(create.body.p_username, 'admin');
+    console.log('✅ slug/super-admin RPC mapping passes');
+  } catch (err) { failures++; console.error('❌ slug/super-admin RPC mapping failed', err); }
 
   if (failures > 0) {
     console.error(`${failures} test group(s) failed.`);
