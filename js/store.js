@@ -40,6 +40,12 @@ function inGroup() {
   return Session.isGroup();
 }
 
+// Vem gör ändringen? Fångas vid enqueue-tillfället så att köade (offline)
+// operationer behåller rätt upphovsperson när de skickas senare.
+function actor() {
+  return { actorId: Session.memberId, actorName: Session.memberName };
+}
+
 // ─── Player Store ───────────────────────────────────────────────────────────
 export const PlayerStore = {
   _cache: null,
@@ -79,14 +85,14 @@ export const PlayerStore = {
     const player = { id: uid(), name: trimmedName, createdAt: new Date().toISOString() };
     players.push(player);
     this._save();
-    if (inGroup()) Outbox.enqueue({ type: 'savePlayer', id: player.id, name: player.name });
+    if (inGroup()) Outbox.enqueue({ type: 'savePlayer', id: player.id, name: player.name, ...actor() });
     return player;
   },
 
   remove(id) {
     this._cache = this.getAll().filter(p => p.id !== id);
     this._save();
-    if (inGroup()) Outbox.enqueue({ type: 'deletePlayer', id });
+    if (inGroup()) Outbox.enqueue({ type: 'deletePlayer', id, ...actor() });
   },
 
   rename(id, newName) {
@@ -96,7 +102,7 @@ export const PlayerStore = {
     if (player) {
       player.name = trimmedName;
       this._save();
-      if (inGroup()) Outbox.enqueue({ type: 'savePlayer', id: player.id, name: player.name });
+      if (inGroup()) Outbox.enqueue({ type: 'savePlayer', id: player.id, name: player.name, ...actor() });
     }
   }
 };
@@ -140,7 +146,7 @@ export const GameStore = {
       games.push(game);
     }
     this._save();
-    if (inGroup()) Outbox.enqueue({ type: 'saveGame', game });
+    if (inGroup()) Outbox.enqueue({ type: 'saveGame', game, ...actor() });
   },
 
   remove(id) {
@@ -149,7 +155,7 @@ export const GameStore = {
     if (this.getActiveId() === id) {
       this.clearActive();
     }
-    if (inGroup()) Outbox.enqueue({ type: 'deleteGame', id });
+    if (inGroup()) Outbox.enqueue({ type: 'deleteGame', id, ...actor() });
   },
 
   getActiveId() {
