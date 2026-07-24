@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kille-cache-v8';
+const CACHE_NAME = 'kille-cache-v9';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -8,6 +8,7 @@ self.addEventListener('install', (event) => {
         './index.html',
         './css/style.css',
         './js/app.js',
+        './js/analytics.js',
         './js/cards.js',
         './js/config.js',
         './js/dom.js',

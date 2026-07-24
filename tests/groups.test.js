@@ -76,12 +76,16 @@ async function runTests() {
     assert.ok(call, 'kille_save_player ska ha anropats');
     assert.strictEqual(call.body.p_group_id, 'G1');
     assert.strictEqual(call.body.p_name, 'GruppSpelare');
+    // Aktivitet: upphovspersonen ska följa med (fångad vid enqueue).
+    assert.strictEqual(call.body.p_member_id, 'm1', 'save_player ska bära actor-id');
+    assert.strictEqual(call.body.p_member_name, 'Rasmus', 'save_player ska bära actor-namn');
     console.log('✅ group sync enqueue/flush passes');
   } catch (err) { failures++; console.error('❌ group sync enqueue/flush failed', err); }
 
   // Test: offline behåller ändringar i outboxen, som sedan töms.
   try {
     fetchMode = 'fail';
+    fetchCalls.length = 0;
     GameStore.invalidate();
     GameStore.save({ id: 'game1', playerIds: ['m1'], rounds: [], status: 'active' });
     await wait(30);
@@ -90,6 +94,11 @@ async function runTests() {
     await Outbox.flush();
     await wait(30);
     assert.strictEqual(Outbox.pending(), 0, 'outbox ska tömmas när online igen');
+    // saveGame ska också bära upphovspersonen genom kön.
+    const gameCall = fetchCalls.find(c => c.url.endsWith('/kille_save_game'));
+    assert.ok(gameCall, 'kille_save_game ska ha anropats');
+    assert.strictEqual(gameCall.body.p_member_id, 'm1', 'save_game ska bära actor-id');
+    assert.strictEqual(gameCall.body.p_member_name, 'Rasmus', 'save_game ska bära actor-namn');
     console.log('✅ offline outbox retention passes');
   } catch (err) { failures++; console.error('❌ offline outbox retention failed', err); }
 
@@ -150,6 +159,14 @@ async function runTests() {
     assert.strictEqual(create.body.p_name, 'Nya Gänget');
     assert.strictEqual(create.body.p_slug, 'nya-ganget');
     assert.strictEqual(create.body.p_username, 'admin');
+
+    // pull ska skicka medlems-id som heartbeat för "senast aktiv".
+    Session.setGroup(snapshot, 'Rasmus', true);
+    fetchCalls.length = 0;
+    await Groups.pull();
+    const pull = fetchCalls.find(c => c.url.endsWith('/kille_pull'));
+    assert.ok(pull, 'kille_pull anropad');
+    assert.strictEqual(pull.body.p_member_id, 'm1', 'pull ska bära medlems-id');
     console.log('✅ slug/super-admin RPC mapping passes');
   } catch (err) { failures++; console.error('❌ slug/super-admin RPC mapping failed', err); }
 

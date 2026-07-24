@@ -14,6 +14,7 @@ import { downloadExport, importFile } from './importexport.js';
 import { $, $$, escHtml, avatarInitial, formatScore, showToast, addSwipeToDismiss } from './dom.js';
 import { Session } from './session.js';
 import { Groups, SuperAdmin, Outbox, onSyncStatus } from './remote.js';
+import { Activity } from './analytics.js';
 import { SUPABASE_ENABLED } from './config.js';
 import { groupSlugFromUrl, isAdminUrl, groupUrl, adminUrl, setUrlForGroup, clearUrl } from './router.js';
 
@@ -58,6 +59,7 @@ function navigateTo(screenId, options = {}) {
   $(`#screen-${screenId}`).classList.add('active');
   updateHeader(screenId);
   renderScreen(screenId);
+  Activity.track('screen_view', { screen: screenId });
   window.scrollTo(0, 0);
 }
 
@@ -544,6 +546,10 @@ let saCred = null;        // in-memory { username, password } — never persiste
 let saExists = null;      // whether any super-admin is configured
 let saGroups = [];        // cached group list
 let saUsersView = null;   // { groupId, name, members, players } when viewing users
+let saTab = 'groups';     // 'groups' | 'usage'
+let saUsage = null;       // cached usage overview (KPIs + daily series)
+let saFeed = [];          // cached activity feed rows
+let saFeedFilter = { eventType: null }; // active feed filter
 
 async function openAdmin() {
   screenStack.push(currentScreen);
@@ -584,6 +590,24 @@ function renderAdmin() {
     return;
   }
 
+  c.innerHTML = `
+    <div class="panel mb-lg">
+      <div class="flex-row" style="justify-content: space-between; align-items: center">
+        <span class="mode-bar__title">Inloggad: ${escHtml(saCred.username)}</span>
+        <button class="mode-bar__btn" id="sa-logout">Logga ut</button>
+      </div>
+      <button class="btn btn--ghost btn--full" id="sa-share-link" style="margin-top: var(--space-md)">🔗 Kopiera/dela admin-länk</button>
+    </div>
+
+    <div class="admin-tabs">
+      <button class="admin-tab ${saTab === 'groups' ? 'admin-tab--active' : ''}" data-sa-tab="groups">Grupper</button>
+      <button class="admin-tab ${saTab === 'usage' ? 'admin-tab--active' : ''}" data-sa-tab="usage">Användning</button>
+    </div>
+
+    ${saTab === 'usage' ? renderUsageDashboard() : renderGroupsTab()}`;
+}
+
+function renderGroupsTab() {
   const groupsHtml = saGroups.length ? saGroups.map(g => `
     <div class="admin-group-item" data-group="${escHtml(g.id)}">
       <div class="admin-group-item__head">
@@ -592,6 +616,9 @@ function renderAdmin() {
       </div>
       <div class="admin-group-item__meta">
         ${g.members} medlemmar · ${g.players} spelare · ${g.games} spel · kod ${escHtml(g.joinCode)}
+      </div>
+      <div class="admin-group-item__meta admin-group-item__usage">
+        ${Number(g.activeMembers7d) || 0} aktiva (7d) · ${Number(g.eventsLast7d) || 0} händelser (7d) · senast aktiv ${formatRelativeTime(g.lastActivityAt)}
       </div>
       <div class="admin-group-item__actions">
         <button class="member-item__action" data-sa-rename="${escHtml(g.id)}">Byt namn</button>
@@ -604,15 +631,7 @@ function renderAdmin() {
     </div>`).join('')
     : '<div class="empty-state"><div class="empty-state__text">Inga grupper ännu.</div></div>';
 
-  c.innerHTML = `
-    <div class="panel mb-lg">
-      <div class="flex-row" style="justify-content: space-between; align-items: center">
-        <span class="mode-bar__title">Inloggad: ${escHtml(saCred.username)}</span>
-        <button class="mode-bar__btn" id="sa-logout">Logga ut</button>
-      </div>
-      <button class="btn btn--ghost btn--full" id="sa-share-link" style="margin-top: var(--space-md)">🔗 Kopiera/dela admin-länk</button>
-    </div>
-
+  return `
     <div class="panel mb-lg">
       <h3 class="panel__title">Skapa grupp</h3>
       <label class="field-label" for="sa-new-name">Gruppnamn</label>
@@ -654,6 +673,141 @@ function renderAdminUsers(groupId) {
     </div>`;
 }
 
+// ─── Användnings-dashboard (super-admin) ─────────────────────────────────────
+
+const EVENT_LABELS = {
+  login: '🔑 Inloggning',
+  group_created: '✨ Grupp skapad',
+  member_left: '👋 Lämnade gruppen',
+  game_saved: '🃏 Sparade spel',
+  game_updated: '✏️ Uppdaterade spel',
+  game_deleted: '🗑️ Raderade spel',
+  player_added: '➕ La till spelare',
+  player_renamed: '✏️ Bytte spelarnamn',
+  player_removed: '➖ Tog bort spelare',
+  admin_action: '⚙️ Admin-åtgärd',
+  screen_view: '👁️ Skärmvisning',
+  feature_used: '⭐ Funktion',
+  pwa_install: '📲 Installerade appen'
+};
+
+function eventLabel(type) {
+  return EVENT_LABELS[type] || type || 'Händelse';
+}
+
+/** Relativ tid på svenska ("3 min sedan"). Tom/ogiltig → "aldrig". */
+function formatRelativeTime(iso) {
+  if (!iso) return 'aldrig';
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return 'aldrig';
+  const diff = Date.now() - then;
+  if (diff < 60000) return 'nyss';
+  const min = Math.floor(diff / 60000);
+  if (min < 60) return `${min} min sedan`;
+  const hrs = Math.floor(min / 60);
+  if (hrs < 24) return `${hrs} h sedan`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days} d sedan`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months} mån sedan`;
+  return `${Math.floor(months / 12)} år sedan`;
+}
+
+function renderUsageDashboard() {
+  if (!saUsage) {
+    return '<div class="panel"><div class="empty-state"><div class="empty-state__text">Laddar användningsdata…</div></div></div>';
+  }
+  const t = saUsage.totals || {};
+  const tiles = [
+    ['Grupper', t.groups], ['Aktiva grupper (7d)', saUsage.activeGroups7d],
+    ['Medlemmar', t.members], ['Aktiva medlemmar (7d)', saUsage.activeMembers7d],
+    ['Händelser idag', saUsage.eventsToday], ['Händelser (7d)', saUsage.events7d],
+    ['Händelser (30d)', saUsage.events30d], ['Spel', t.games]
+  ].map(([label, val]) => `
+    <div class="kpi-tile">
+      <div class="kpi-tile__value">${Number(val) || 0}</div>
+      <div class="kpi-tile__label">${label}</div>
+    </div>`).join('');
+
+  const series = Array.isArray(saUsage.dailySeries) ? saUsage.dailySeries : [];
+  const max = Math.max(1, ...series.map(d => Number(d.count) || 0));
+  const bars = series.map(d => {
+    const h = Math.round(((Number(d.count) || 0) / max) * 100);
+    return `<div class="usage-bar" title="${escHtml(d.day)}: ${Number(d.count) || 0}">
+      <div class="usage-bar__fill" style="height:${h}%"></div></div>`;
+  }).join('');
+
+  const filterOptions = ['', 'login', 'game_saved', 'game_deleted', 'player_added',
+    'admin_action', 'screen_view', 'feature_used', 'pwa_install']
+    .map(v => `<option value="${v}" ${saFeedFilter.eventType === (v || null) ? 'selected' : ''}>${v ? eventLabel(v) : 'Alla händelser'}</option>`)
+    .join('');
+
+  const feedHtml = saFeed.length ? saFeed.map(ev => `
+    <li class="feed-item">
+      <span class="feed-item__event">${eventLabel(ev.eventType)}</span>
+      <span class="feed-item__meta">${ev.memberName ? escHtml(ev.memberName) + ' · ' : ''}${escHtml(ev.groupName || '—')} · ${formatRelativeTime(ev.createdAt)}</span>
+    </li>`).join('')
+    : '<li class="field-hint">Ingen aktivitet ännu.</li>';
+
+  return `
+    <div class="panel mb-lg">
+      <h3 class="panel__title">Översikt</h3>
+      <div class="kpi-grid">${tiles}</div>
+    </div>
+
+    <div class="panel mb-lg">
+      <h3 class="panel__title">Händelser per dag (30 dagar)</h3>
+      <div class="usage-chart">${bars || '<div class="field-hint">Ingen data.</div>'}</div>
+    </div>
+
+    <div class="panel">
+      <div class="flex-row" style="justify-content: space-between; align-items: center; gap: var(--space-sm)">
+        <h3 class="panel__title" style="margin: 0">Aktivitet</h3>
+        <select class="input" id="sa-feed-filter" style="width: auto">${filterOptions}</select>
+      </div>
+      <ul class="feed-list">${feedHtml}</ul>
+      ${saFeed.length >= 50 ? '<button class="btn btn--ghost btn--full" id="sa-feed-more">Ladda fler</button>' : ''}
+    </div>`;
+}
+
+function saShowTab(tab) {
+  saTab = tab === 'usage' ? 'usage' : 'groups';
+  renderAdmin();
+  if (saTab === 'usage' && !saUsage) saLoadUsage();
+}
+
+async function saLoadUsage() {
+  try {
+    const [overview, feed] = await Promise.all([
+      SuperAdmin.usageOverview(saCred),
+      SuperAdmin.activityFeed(saCred, { limit: 50, eventType: saFeedFilter.eventType })
+    ]);
+    saUsage = overview;
+    saFeed = Array.isArray(feed) ? feed : [];
+    renderAdmin();
+  } catch (err) {
+    showToast(err.message || 'Kunde inte hämta användningsdata');
+    if (err.code === 'INVALID_ADMIN_LOGIN') { saCred = null; renderAdmin(); }
+  }
+}
+
+async function saFilterFeed(eventType) {
+  saFeedFilter.eventType = eventType || null;
+  try {
+    saFeed = await SuperAdmin.activityFeed(saCred, { limit: 50, eventType: saFeedFilter.eventType }) || [];
+    renderAdmin();
+  } catch (err) { showToast(err.message || 'Misslyckades'); }
+}
+
+async function saFeedMore() {
+  const before = saFeed.length ? saFeed[saFeed.length - 1].createdAt : null;
+  try {
+    const more = await SuperAdmin.activityFeed(saCred, { limit: 50, before, eventType: saFeedFilter.eventType }) || [];
+    saFeed = saFeed.concat(more);
+    renderAdmin();
+  } catch (err) { showToast(err.message || 'Misslyckades'); }
+}
+
 async function saLoadGroups() {
   try {
     saGroups = await SuperAdmin.listGroups(saCred);
@@ -691,6 +845,10 @@ function saLogout() {
   saCred = null;
   saGroups = [];
   saUsersView = null;
+  saTab = 'groups';
+  saUsage = null;
+  saFeed = [];
+  saFeedFilter = { eventType: null };
   renderAdmin();
 }
 
@@ -1407,6 +1565,7 @@ function endGame() {
     activeGame = completeGame(activeGame);
     GameStore.save(activeGame);
     GameStore.clearActive();
+    Activity.track('feature_used', { feature: 'complete_game', rounds: activeGame.rounds.length });
     showGameEndLeaderboard(activeGame);
     activeGame = null;
   });
@@ -2024,6 +2183,7 @@ function answerProtocolQuestion(counted) {
 // ═══════════════════════════════════════════════════════════════════════════
 function handleExport() {
   downloadExport();
+  Activity.track('feature_used', { feature: 'export' });
   showToast('Data exporterad');
 }
 
@@ -2263,6 +2423,8 @@ function bindGroupEvents() {
     if (e.target.closest('#sa-bootstrap')) return saBootstrap();
     if (e.target.closest('#sa-logout')) return saLogout();
     if (e.target.closest('#sa-create')) return saCreateGroup();
+    if (e.target.closest('#sa-feed-more')) return saFeedMore();
+    const tab = e.target.closest('[data-sa-tab]'); if (tab) return saShowTab(tab.dataset.saTab);
     const rename = e.target.closest('[data-sa-rename]'); if (rename) return saRename(rename.dataset.saRename);
     const slug = e.target.closest('[data-sa-slug]'); if (slug) return saSetSlug(slug.dataset.saSlug);
     const regen = e.target.closest('[data-sa-regen]'); if (regen) return saRegen(regen.dataset.saRegen);
@@ -2274,6 +2436,9 @@ function bindGroupEvents() {
   $('#admin-content').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.target.id === 'sa-user' || e.target.id === 'sa-pass')) saLogin();
   });
+  $('#admin-content').addEventListener('change', (e) => {
+    if (e.target.id === 'sa-feed-filter') saFilterFeed(e.target.value);
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2283,6 +2448,9 @@ function init() {
   initCardPicker();
   bindEvents();
   onSyncStatus(handleSyncStatus);
+
+  // Produktanalys: registrera PWA-installation (grupp-läge loggar, lokalt no-op).
+  window.addEventListener('appinstalled', () => Activity.track('pwa_install'));
 
   // Restore active game if any
   activeGame = GameStore.getActive();

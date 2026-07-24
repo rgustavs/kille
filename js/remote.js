@@ -33,7 +33,7 @@ export const Groups = {
 
   pull() {
     const g = Session.group;
-    return rpc('kille_pull', { p_group_id: g.id, p_join_code: g.joinCode });
+    return rpc('kille_pull', { p_group_id: g.id, p_join_code: g.joinCode, p_member_id: Session.memberId });
   },
 
   verifyAdmin(adminCode) {
@@ -115,6 +115,18 @@ export const SuperAdmin = {
   },
   listGroups(cred) {
     return rpc('kille_sa_list_groups', { p_username: cred.username, p_password: cred.password });
+  },
+  usageOverview(cred) {
+    return rpc('kille_sa_usage_overview', { p_username: cred.username, p_password: cred.password });
+  },
+  activityFeed(cred, opts = {}) {
+    return rpc('kille_sa_activity_feed', {
+      p_username: cred.username, p_password: cred.password,
+      p_limit: opts.limit || 50,
+      p_before: opts.before || null,
+      p_group_id: opts.groupId || null,
+      p_event_type: opts.eventType || null
+    });
   },
   createGroup(cred, name, adminCode, slug) {
     return rpc('kille_sa_create_group', {
@@ -198,15 +210,18 @@ function writeOutbox(ops) {
 function sendOp(op) {
   const g = Session.group;
   const base = { p_group_id: g.id, p_join_code: g.joinCode };
+  // Upphovsperson fångades vid enqueue (op.actorId/actorName) så att offline-
+  // köade ändringar tillskrivs rätt medlem, inte den som råkar vara inloggad nu.
+  const who = { p_member_id: op.actorId || null, p_member_name: op.actorName || null };
   switch (op.type) {
     case 'savePlayer':
-      return rpc('kille_save_player', { ...base, p_id: op.id, p_name: op.name });
+      return rpc('kille_save_player', { ...base, p_id: op.id, p_name: op.name, ...who });
     case 'deletePlayer':
-      return rpc('kille_delete_player', { ...base, p_id: op.id });
+      return rpc('kille_delete_player', { ...base, p_id: op.id, ...who });
     case 'saveGame':
-      return rpc('kille_save_game', { ...base, p_game: op.game });
+      return rpc('kille_save_game', { ...base, p_game: op.game, ...who });
     case 'deleteGame':
-      return rpc('kille_delete_game', { ...base, p_id: op.id });
+      return rpc('kille_delete_game', { ...base, p_id: op.id, ...who });
     default:
       return Promise.resolve();
   }

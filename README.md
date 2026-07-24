@@ -121,6 +121,39 @@ group URL takes you straight into that group.
   groups and users from a console at `/?admin=1` (or `/admin`): create/rename/delete
   groups, change slugs, regenerate codes, and remove members/players in any group. The
   first super-admin is created (bootstrapped) from the login screen when none exists.
+  The console also has a **Användning (Usage)** tab — a platform-wide activity monitor
+  (see below).
+
+### Usage activity monitoring
+
+The super-admin console includes a platform-wide **usage dashboard** (the *Användning*
+tab). It surfaces, across all groups:
+
+- **KPI tiles** — total/active groups, total/active members (7-day), games, and event
+  counts (today / 7 d / 30 d).
+- **A 30-day events-per-day chart**.
+- **A named activity feed** — recent events with who did what, in which group, and when,
+  filterable by event type.
+- **Per-group usage** on the group list — last-active time, active members and events in
+  the last 7 days.
+
+Activity is captured three ways, all writing to the append-only `kille_activity` table:
+
+1. **Data & session events** are logged automatically inside the existing
+   `SECURITY DEFINER` RPCs — logins/joins, games saved/deleted, players added/removed,
+   member leaves and admin actions. These are tamper-resistant (the client cannot forge
+   them) and attributed to the acting member by name.
+2. **Member "last seen"** — every write and every `kille_pull` heartbeat bumps
+   `kille_group_members.last_seen_at`, powering the "active members" metrics.
+3. **Product analytics** — the client ([`js/analytics.js`](js/analytics.js)) batches
+   lightweight in-app usage (screen views, feature usage, PWA installs) and sends them via
+   `kille_log_activity`. The queue is offline-tolerant (like the sync `Outbox`) and only
+   runs in **group mode** — in local mode nothing ever leaves the device.
+
+Only the super-admin can read the activity log (via `kille_sa_usage_overview` and
+`kille_sa_activity_feed`). To enable it on an existing database, just re-run
+[`supabase/schema.sql`](supabase/schema.sql) — it is idempotent and adds the new table,
+column and functions in place.
 
 ### One-time setup
 
