@@ -36,6 +36,7 @@ export function computeAdvancedStats(games, players) {
       cardFrequency: {},  // cardId -> count (as loser)
       winnerCardFrequency: {},  // cardId -> count (as winner)
       scoreHistory: [],   // array of game totals over time
+      roundScores: [],    // score from every counted round the player took part in
       currentStreak: { type: null, count: 0 }, // win/loss streak
       longestWinStreak: 0, // longest run of winning games ever
       avgScorePerRound: 0,
@@ -112,6 +113,10 @@ export function computeAdvancedStats(games, players) {
 
     // Process each round
     game.rounds.forEach(round => {
+      // A non-counted round leaves the standings untouched, so it stays out
+      // of the score distributions as well.
+      const counted = round.counted !== false;
+
       // Track round participation
       gamePlayers.forEach(pid => {
         if (round.standByIds.includes(pid)) {
@@ -125,6 +130,7 @@ export function computeAdvancedStats(games, players) {
       if (playerStats[round.winnerId]) {
         const ps = playerStats[round.winnerId];
         ps.roundsWon++;
+        if (counted) ps.roundScores.push(round.winnerScore);
         if (ps.bestRoundScore === null || round.winnerScore > ps.bestRoundScore) {
           ps.bestRoundScore = round.winnerScore;
         }
@@ -150,6 +156,7 @@ export function computeAdvancedStats(games, players) {
         if (!playerStats[l.playerId]) return;
         const ps = playerStats[l.playerId];
         ps.roundsLost++;
+        if (counted) ps.roundScores.push(l.score);
 
         if (ps.worstRoundScore === null || l.score < ps.worstRoundScore) {
           ps.worstRoundScore = l.score;
@@ -233,10 +240,69 @@ export function computeAdvancedStats(games, players) {
     ps.longestWinStreak = longestWin;
   });
 
+  // Every score ever recorded, across all players — the basis for the
+  // overall score distributions.
+  const scores = { roundScores: [], gameScores: [] };
+  players.forEach(p => {
+    const ps = playerStats[p.id];
+    if (!ps) return;
+    ps.roundScores.forEach(s => scores.roundScores.push(s));
+    ps.scoreHistory.forEach(h => scores.gameScores.push(h.score));
+  });
+
   // Records
   const records = computeRecords(playerStats, players);
 
-  return { players: playerStats, cards: cardStats, records };
+  return { players: playerStats, cards: cardStats, records, scores };
+}
+
+/** Bucket sizes a histogram may snap to, smallest first. */
+const HISTOGRAM_BUCKET_SIZES = [5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000];
+
+/**
+ * Bucket a list of scores into a histogram.
+ * Bucket edges are aligned on zero, so no bucket straddles it and every
+ * bucket is either entirely a win or entirely a loss.
+ * @param {number[]} values - The scores to distribute
+ * @param {object} [options] - { maxBuckets } upper bound on the bucket count
+ * @returns {object|null} { bucketSize, buckets, maxCount, total, min, max, average }
+ */
+export function buildHistogram(values, { maxBuckets = 12 } = {}) {
+  if (!Array.isArray(values) || values.length === 0) return null;
+
+  let min = values[0];
+  let max = values[0];
+  let sum = 0;
+  values.forEach(v => {
+    if (v < min) min = v;
+    if (v > max) max = v;
+    sum += v;
+  });
+
+  const span = max - min;
+  const bucketSize = HISTOGRAM_BUCKET_SIZES.find(size => span / size < maxBuckets)
+    || HISTOGRAM_BUCKET_SIZES[HISTOGRAM_BUCKET_SIZES.length - 1];
+
+  const firstIndex = Math.floor(min / bucketSize);
+  const lastIndex = Math.floor(max / bucketSize);
+  const buckets = [];
+  for (let i = firstIndex; i <= lastIndex; i++) {
+    buckets.push({ from: i * bucketSize, to: (i + 1) * bucketSize, count: 0 });
+  }
+  values.forEach(v => {
+    const bucket = buckets[Math.floor(v / bucketSize) - firstIndex];
+    if (bucket) bucket.count++;
+  });
+
+  return {
+    bucketSize,
+    buckets,
+    maxCount: buckets.reduce((m, b) => Math.max(m, b.count), 0),
+    total: values.length,
+    min,
+    max,
+    average: Math.round(sum / values.length * 10) / 10,
+  };
 }
 
 /**

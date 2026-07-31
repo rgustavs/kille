@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { computeAdvancedStats, getCardsInDisplayOrder } from '../js/stats.js';
+import { computeAdvancedStats, getCardsInDisplayOrder, buildHistogram } from '../js/stats.js';
 import { CARDS } from '../js/cards.js';
 
 /** Build a completed 2-player game where `winnerId` wins a single round. */
@@ -70,6 +70,59 @@ function runTests() {
   } catch (err) {
     failures++;
     console.error('❌ card display order failed', err);
+  }
+
+  // Test: histogram buckets are aligned on zero, so no bucket mixes wins with
+  // losses, and every value lands in exactly one bucket.
+  try {
+    assert.strictEqual(buildHistogram([]), null);
+
+    const hist = buildHistogram([-70, -50, -5, 0, 5, 50, 215]);
+    assert.ok(hist.buckets.every(b => b.from >= 0 || b.to <= 0), 'no bucket straddles zero');
+    assert.ok(hist.buckets.some(b => b.from === 0), 'a bucket starts at zero');
+    assert.strictEqual(hist.buckets.reduce((sum, b) => sum + b.count, 0), 7);
+    assert.strictEqual(hist.total, 7);
+    assert.strictEqual(hist.min, -70);
+    assert.strictEqual(hist.max, 215);
+
+    // Buckets are contiguous and ordered from the lowest score upwards.
+    hist.buckets.forEach((b, i) => {
+      assert.strictEqual(b.to - b.from, hist.bucketSize);
+      if (i > 0) assert.strictEqual(b.from, hist.buckets[i - 1].to);
+    });
+    assert.ok(hist.buckets[0].from <= -70 && hist.buckets[hist.buckets.length - 1].to > 215);
+
+    // A single repeated value still produces one bucket holding everything.
+    const flat = buildHistogram([25, 25, 25]);
+    assert.strictEqual(flat.total, 3);
+    assert.strictEqual(flat.maxCount, 3);
+    assert.strictEqual(flat.average, 25);
+    console.log('✅ score histogram passes');
+  } catch (err) {
+    failures++;
+    console.error('❌ score histogram failed', err);
+  }
+
+  // Test: round scores feed the distributions, and a non-counted round is left out.
+  try {
+    const players = [{ id: 'p1', name: 'A' }, { id: 'p2', name: 'B' }];
+    const game = makeGame('g1', '2024-01-01T10:00:00.000Z', 'p1', 'p2');
+    game.rounds.push({
+      roundNumber: 2, winnerId: 'p1', winnerCardId: 'num_1', winnerScore: 5,
+      standByIds: [], counted: false,
+      losers: [{ playerId: 'p2', cardId: 'num_1', score: -5, neken: false }],
+      timestamp: '2024-01-01T11:00:00.000Z'
+    });
+
+    const stats = computeAdvancedStats([game], players);
+    assert.deepStrictEqual(stats.players.p1.roundScores, [50]);
+    assert.deepStrictEqual(stats.players.p2.roundScores, [-50]);
+    assert.deepStrictEqual(stats.scores.roundScores.slice().sort((a, b) => a - b), [-50, 50]);
+    assert.deepStrictEqual(stats.scores.gameScores.slice().sort((a, b) => a - b), [-50, 50]);
+    console.log('✅ score distributions passes');
+  } catch (err) {
+    failures++;
+    console.error('❌ score distributions failed', err);
   }
 
   if (failures > 0) {
