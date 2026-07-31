@@ -2725,13 +2725,79 @@ body {
   margin-bottom: 0;
 }
 
-.rules-item__body ul {
+.rules-item__body ul,
+.rules-item__body ol {
   margin: 0 0 var(--space-sm);
   padding-left: 1.2rem;
 }
 
 .rules-item__body li {
   margin-bottom: var(--space-xs);
+}
+
+.rules-item__body li ul {
+  margin-top: var(--space-xs);
+}
+
+.rules-item__body h4 {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--green-700);
+  margin: var(--space-md) 0 var(--space-xs);
+}
+
+.rules-item__body h4:first-child {
+  margin-top: 0;
+}
+
+.rules-example {
+  background: var(--cream-200);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+
+.rules-example p,
+.rules-example ul {
+  margin-bottom: var(--space-xs);
+}
+
+.rules-example p:last-child {
+  margin-bottom: 0;
+}
+
+.rules-table-wrap {
+  overflow-x: auto;
+  margin-bottom: var(--space-sm);
+}
+
+.rules-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.85rem;
+}
+
+.rules-table th,
+.rules-table td {
+  text-align: left;
+  padding: var(--space-xs) var(--space-sm);
+  border-bottom: 1px solid var(--cream-300);
+  white-space: nowrap;
+}
+
+.rules-table td:last-child {
+  white-space: normal;
+}
+
+.rules-table th {
+  color: var(--green-700);
+  font-family: var(--font-display);
+}
+
+.rules-refs {
+  font-size: 0.8rem;
+  color: var(--text-muted);
 }
 
 /* ─── Printable Card Values Sheet (PDF) ───────────────────────────────────── */
