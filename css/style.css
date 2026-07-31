@@ -2567,6 +2567,14 @@ body {
   color: var(--gold-500);
 }
 
+.cv-tile--liljor-merged {
+  display: none;
+}
+
+.cv-tile--liljor-merged .cv-visual--small.cv-visual--number {
+  font-size: 1.1rem;
+}
+
 .card-values__heading {
   font-family: var(--font-display);
   font-size: 1.25rem;
@@ -2634,6 +2642,22 @@ body {
   font-size: 1rem;
   font-weight: 600;
   margin-left: 2px;
+}
+
+/* On mobile the page is simplified: picture and zero cards still show individually,
+   but the 12 number cards (liljor) collapse into a single merged tile, and the
+   detail list below (a duplicate of the overview) is hidden to cut scrolling. */
+@media (max-width: 600px) {
+  .cv-tile[data-card-type="number"] {
+    display: none;
+  }
+  .cv-tile--liljor-merged {
+    display: flex;
+  }
+  .card-values__heading,
+  .card-values__detail {
+    display: none;
+  }
 }
 
 /* ─── Printable Card Values Sheet (PDF) ───────────────────────────────────── */

@@ -1461,14 +1461,23 @@ function cardVisual(card, modifier) {
 
 function renderCardValues() {
   const sorted = sortCardsByRank(CARDS);
+  const numberCards = getCardsByType('number');
+  const minPoints = Math.min(...numberCards.map(c => c.points));
+  const maxPoints = Math.max(...numberCards.map(c => c.points));
 
   $('#card-values-overview').innerHTML = sorted.map(c => `
-    <div class="cv-tile">
+    <div class="cv-tile" data-card-type="${c.type}">
       ${cardVisual(c, '--small')}
       <span class="cv-tile__name">${escHtml(c.name)}</span>
       <span class="cv-tile__points">${c.points} p</span>
     </div>
-  `).join('');
+  `).join('') + `
+    <div class="cv-tile cv-tile--liljor-merged">
+      <div class="cv-visual--small cv-visual--number">1-12</div>
+      <span class="cv-tile__name">Liljor</span>
+      <span class="cv-tile__points">${minPoints}-${maxPoints} p</span>
+    </div>
+  `;
 
   $('#card-values-detail').innerHTML = sorted.map(c => `
     <div class="cv-detail">
