@@ -2471,14 +2471,12 @@ body {
   width: 100%;
   max-width: 120px;
   aspect-ratio: 1/1;
-  object-fit: contain;
-  background: var(--cream-100);
-  border-radius: var(--radius-md);
-  border: 3px solid var(--cream-300);
+  object-fit: cover;
+  border-radius: 8px;
+  border: 2px solid var(--cream-300);
   box-shadow:
-    0 0 0 2px var(--cream-100),
-    0 0 0 4px var(--cream-400),
-    0 2px 8px rgba(0, 0, 0, 0.1);
+    0 0 0 4px var(--cream-100),
+    0 0 0 6px var(--cream-400);
 }
 
 .action-card__title {
