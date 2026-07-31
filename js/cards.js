@@ -5,12 +5,12 @@
 
 export const CARDS = [
   // === Picture Cards (Bildkort) ===
-  { id: 'harlekin', name: 'Harlekin', type: 'picture', points: 100, image: 'assets/cards/harlekin.png' },
-  { id: 'kuku', name: 'Kuku', type: 'picture', points: 90, image: 'assets/cards/kuku.png' },
-  { id: 'husar', name: 'Husar', type: 'picture', points: 80, image: 'assets/cards/husar.png' },
-  { id: 'kavall', name: 'Kavall', type: 'picture', points: 70, image: 'assets/cards/kavall.png' },
-  { id: 'husu', name: 'Husu', type: 'picture', points: 75, image: 'assets/cards/husu.png' },
-  { id: 'vardshus', name: 'Värdshus', type: 'picture', points: 65, image: 'assets/cards/vardshus.png' },
+  { id: 'harlekin', name: 'Harlekin', type: 'picture', points: 100, image: 'assets/cards/harlekin.png?v=2' },
+  { id: 'kuku', name: 'Kuku', type: 'picture', points: 90, image: 'assets/cards/kuku.png?v=2' },
+  { id: 'husar', name: 'Husar', type: 'picture', points: 80, image: 'assets/cards/husar.png?v=2' },
+  { id: 'kavall', name: 'Kavall', type: 'picture', points: 70, image: 'assets/cards/kavall.png?v=2' },
+  { id: 'husu', name: 'Husu', type: 'picture', points: 75, image: 'assets/cards/husu.png?v=2' },
+  { id: 'vardshus', name: 'Värdshus', type: 'picture', points: 65, image: 'assets/cards/vardshus.png?v=2' },
 
   // === Number Cards (Sifferkort / Liljor) — points = number × 5 ===
   { id: 'num_12', name: '12', type: 'number', points: 60, number: 12 },
@@ -27,9 +27,9 @@ export const CARDS = [
   { id: 'num_1', name: '1', type: 'number', points: 5, number: 1 },
 
   // === Zero Cards (Nollkort) ===
-  { id: 'kransen', name: 'Kransen', type: 'zero', points: 0, image: 'assets/cards/kransen.png' },
-  { id: 'blompotten', name: 'Blompotten', type: 'zero', points: 0, image: 'assets/cards/blompotten.png' },
-  { id: 'blaren', name: 'Blaren', type: 'zero', points: 0, image: 'assets/cards/blaren.png' },
+  { id: 'kransen', name: 'Kransen', type: 'zero', points: 0, image: 'assets/cards/kransen.png?v=2' },
+  { id: 'blompotten', name: 'Blompotten', type: 'zero', points: 0, image: 'assets/cards/blompotten.png?v=2' },
+  { id: 'blaren', name: 'Blaren', type: 'zero', points: 0, image: 'assets/cards/blaren.png?v=2' },
 ];
 
 /**
