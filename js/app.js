@@ -86,6 +86,7 @@ function updateHeader(screenId) {
     'view-game': 'Spelprotokoll',
     stats: 'Statistik',
     cards: 'Kortvärden',
+    rules: 'Spelregler',
     group: 'Grupp',
     admin: 'Super-admin'
   };
@@ -109,6 +110,7 @@ function renderScreen(screenId) {
     case 'history': renderHistory(); break;
     case 'stats': renderStats(); break;
     case 'cards': renderCardValues(); break;
+    case 'rules': break; // static content
     case 'group': renderGroup(); break;
     case 'admin': renderAdmin(); break;
     case 'view-game': break; // rendered when entering
@@ -1461,14 +1463,23 @@ function cardVisual(card, modifier) {
 
 function renderCardValues() {
   const sorted = sortCardsByRank(CARDS);
+  const numberCards = getCardsByType('number');
+  const minPoints = Math.min(...numberCards.map(c => c.points));
+  const maxPoints = Math.max(...numberCards.map(c => c.points));
 
   $('#card-values-overview').innerHTML = sorted.map(c => `
-    <div class="cv-tile">
+    <div class="cv-tile" data-card-type="${c.type}">
       ${cardVisual(c, '--small')}
       <span class="cv-tile__name">${escHtml(c.name)}</span>
       <span class="cv-tile__points">${c.points} p</span>
     </div>
-  `).join('');
+  `).join('') + `
+    <div class="cv-tile cv-tile--liljor-merged">
+      <div class="cv-visual--small cv-visual--number">1-12</div>
+      <span class="cv-tile__name">Liljor</span>
+      <span class="cv-tile__points">${minPoints}-${maxPoints} p</span>
+    </div>
+  `;
 
   $('#card-values-detail').innerHTML = sorted.map(c => `
     <div class="cv-detail">
@@ -2334,6 +2345,7 @@ function bindEvents() {
   $('#btn-history').addEventListener('click', () => navigateTo('history'));
   $('#btn-stats').addEventListener('click', () => navigateTo('stats'));
   $('#btn-card-values').addEventListener('click', () => navigateTo('cards'));
+  $('#btn-rules').addEventListener('click', () => navigateTo('rules'));
   $('#btn-print-cards').addEventListener('click', () => window.print());
   $('#btn-export').addEventListener('click', handleExport);
   $('#btn-import').addEventListener('click', handleImport);

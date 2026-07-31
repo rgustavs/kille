@@ -127,6 +127,10 @@
             <span class="action-card__emoji" aria-hidden="true">⚜</span>
             <span class="action-card__title">Kortvärden</span>
           </button>
+          <button class="action-card action-card--wide" id="btn-rules">
+            <span class="action-card__emoji" aria-hidden="true">📖</span>
+            <span class="action-card__title">Spelregler</span>
+          </button>
         </div>
         <div class="home-data-actions">
           <button class="btn btn--ghost btn--half" id="btn-export">⬆ Exportera</button>
@@ -257,10 +261,72 @@
     <!-- ── Card Values ── -->
     <section class="screen app-content" id="screen-cards">
       <p class="card-values__intro">Alla kort i Kille och deras poängvärde. Sifferkorten (liljor) är värda talet × 5.</p>
-      <button class="btn btn--ghost btn--full mb-lg" id="btn-print-cards">⎙ Skriv ut / Spara som PDF</button>
       <div class="card-values__overview" id="card-values-overview"></div>
       <h3 class="card-values__heading">Alla kort i detalj</h3>
       <div class="card-values__detail" id="card-values-detail"></div>
+      <button class="btn btn--ghost btn--full mt-lg" id="btn-print-cards">⎙ Skriv ut / Spara som PDF</button>
+    </section>
+
+    <!-- ── Rules ── -->
+    <section class="screen app-content" id="screen-rules">
+      <p class="rules-intro">En snabbgenomgång av hur Kille spelas och räknas. Det här är ett första utkast av reglerna — hör efter med sällskapet och justera det som inte stämmer med er variant.</p>
+
+      <div class="rules-list">
+        <details class="rules-item" open>
+          <summary class="rules-item__title">Korten</summary>
+          <div class="rules-item__body">
+            <p>Kille spelas med en egen kortlek på 21 kort i tre grupper:</p>
+            <ul>
+              <li><strong>6 bildkort</strong> — Harlekin (100 p), Kuku (90 p), Husar (80 p), Husu (75 p), Kavall (70 p) och Värdshus (65 p).</li>
+              <li><strong>12 sifferkort (liljor)</strong> — kort 1–12, värda kortets tal × 5 poäng (5–60 p).</li>
+              <li><strong>3 nollkort</strong> — Kransen, Blompotten och Blaren, alla värda 0 poäng.</li>
+            </ul>
+            <p>Se fliken <em>Kortvärden</em> för en fullständig lista med bilder.</p>
+          </div>
+        </details>
+
+        <details class="rules-item">
+          <summary class="rules-item__title">Stickspel</summary>
+          <div class="rules-item__body">
+            <p>En omgång spelas ut som ett stickspel. När omgången är klar står det klart vem som är omgångens <strong>vinnare</strong> — övriga spelare (utom de som vilar) hamnar var och en med ett kort som avgör hur mycket de förlorar.</p>
+            <p>I appen registreras utfallet i tre steg: vem som vilar denna omgång, vem som vann, och vilket kort var och en av förlorarna fick tilldelat.</p>
+          </div>
+        </details>
+
+        <details class="rules-item">
+          <summary class="rules-item__title">Poängräkning</summary>
+          <div class="rules-item__body">
+            <p>Vinnarens poäng för omgången är <strong>summan av alla förlorares kort</strong>. Varje förlorare får sitt kortvärde draget från sin totalsumma, medan vinnaren får hela potten tillagd.</p>
+            <p>Vilande spelare varken vinner eller förlorar poäng den omgången — de får 0.</p>
+            <p>Protokollet visar en löpande totalsumma per spelare efter varje omgång.</p>
+          </div>
+        </details>
+
+        <details class="rules-item">
+          <summary class="rules-item__title">Bättre kort</summary>
+          <div class="rules-item__body">
+            <p>Korten rangordnas efter poängvärde, från högst till lägst: <strong>Harlekin</strong> är det dyraste kortet att bli tilldelad, följt av Kuku, Husar, Husu, Kavall och Värdshus, därefter liljorna 12 ner till 1, och lägst av alla — <strong>nollkorten</strong> (Kransen, Blompotten, Blaren), som inte kostar något.</p>
+            <p>Som förlorare vill man alltså helst bli tilldelad ett lågt kort eller ett nollkort — inte Harlekin.</p>
+          </div>
+        </details>
+
+        <details class="rules-item">
+          <summary class="rules-item__title">Specialregler</summary>
+          <div class="rules-item__body">
+            <p><strong>Neken</strong> — om en förlorare nekas fördubblas kortets poängvärde, men aldrig till mindre än 50 poäng (ett golv). Ett lågt kort med neken kan alltså ändå kosta 50 poäng.</p>
+            <p><strong>Låg pott</strong> — är omgångens pott 15 poäng eller mindre frågar appen om ni vill räkna med omgången i ställningen, eller bara protokollföra den utan att den påverkar totalsumman.</p>
+            <p><strong>Vila</strong> — en spelare kan stå över (vila) en omgång istället för att spela; vilande spelare räknas varken som vinnare eller förlorare den omgången.</p>
+          </div>
+        </details>
+
+        <details class="rules-item">
+          <summary class="rules-item__title">Historik</summary>
+          <div class="rules-item__body">
+            <p>Kille är ett traditionellt svenskt kortspel som spelas med en egen, namngiven kortlek istället för en vanlig fransk 52-korts lek. Reglerna har ofta förts vidare muntligt inom familjer och vänskapskretsar, så mindre variationer — som just neken-regeln eller gränsen för låg pott — kan skilja sig mellan olika sällskap. De regler som beskrivs ovan är den variant den här appen är byggd för.</p>
+            <p>Under fliken <em>Historik</em> i appen hittar ni istället ert eget sällskaps spelade omgångar och matcher.</p>
+          </div>
+        </details>
+      </div>
     </section>
 
     <!-- ── Group management ── -->
