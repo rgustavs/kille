@@ -269,7 +269,7 @@
 
     <!-- ── Rules ── -->
     <section class="screen app-content" id="screen-rules">
-      <p class="rules-intro">En snabbgenomgång av hur Kille spelas och räknas. Det här är ett första utkast av reglerna — hör efter med sällskapet och justera det som inte stämmer med er variant.</p>
+      <p class="rules-intro">En genomgång av hur Kille spelas och räknas, i varianten femkorts krypkille.</p>
 
       <div class="rules-list">
         <details class="rules-item" open>
@@ -288,8 +288,38 @@
         <details class="rules-item">
           <summary class="rules-item__title">Stickspel</summary>
           <div class="rules-item__body">
-            <p>En omgång spelas ut som ett stickspel. När omgången är klar står det klart vem som är omgångens <strong>vinnare</strong> — övriga spelare (utom de som vilar) hamnar var och en med ett kort som avgör hur mycket de förlorar.</p>
-            <p>I appen registreras utfallet i tre steg: vem som vilar denna omgång, vem som vann, och vilket kort var och en av förlorarna fick tilldelat.</p>
+            <p><strong>Femkorts krypkille</strong> spelas med fem kort per spelare, men bara fyra stick. Efter det fjärde sticket har varje spelare ett kort kvar — det är detta kort som avgör slutet av given.</p>
+
+            <h4>Så spelas ett stick</h4>
+            <ol>
+              <li>Spelaren till vänster om given spelar ut valfritt kort i första sticket.</li>
+              <li>Nästa spelare jämför sin hand med det högsta kort som hittills spelats i sticket:
+                <ul>
+                  <li>Har spelaren ett lika högt eller högre kort måste hen spela det lägsta kortet som klarar detta.</li>
+                  <li>Kan spelaren inte nå upp till det högsta kortet måste hen spela sitt lägsta kort. Detta är att <strong>krypa</strong>.</li>
+                </ul>
+              </li>
+              <li>Alla spelare lägger ett kort.</li>
+              <li>Det högsta kortet vinner sticket.</li>
+              <li>Vid två lika höga kort vinner det kort som spelades sist.</li>
+              <li>Stickvinnaren spelar ut först i nästa stick.</li>
+            </ol>
+            <p>Det är alltså normalt inte valfritt vilket kort man spelar efter utspelet — reglerna styr vilket kort som ska läggas.</p>
+
+            <h4>Exempel</h4>
+            <div class="rules-example">
+              <p>Anna spelar 8.</p>
+              <ul>
+                <li>Bertil har 3, 9 och 12. Han måste spela 9, eftersom det är hans lägsta kort som når över 8.</li>
+                <li>Cecilia har 2, 5 och 7. Hon kan inte nå över 9 och måste därför krypa med 2.</li>
+                <li>David har 9 och 11. Han spelar 9. Eftersom hans nia spelades sist räknas den som högst.</li>
+              </ul>
+              <p>David vinner sticket och spelar ut först nästa gång.</p>
+            </div>
+
+            <h4>Efter fyra stick</h4>
+            <p>Efter det fjärde sticket har alla ett kort kvar. Målet är att ha det lägsta kvarvarande kortet – inte att vinna flest stick. I en vanlig variant börjar vinnaren av det fjärde sticket därefter en deklarationsrunda där spelarna får säga deklarerar eller pass beroende på om de tror att deras kvarvarande kort är lägst.</p>
+            <p>Kortordningen är, från högst till lägst: Harlekin – Kuku – Husar – Husu – Kavall – Värdshus – 12 till 1 – Krans – Blompotta – Blaren.</p>
           </div>
         </details>
 
@@ -322,8 +352,76 @@
         <details class="rules-item">
           <summary class="rules-item__title">Historik</summary>
           <div class="rules-item__body">
-            <p>Kille är ett traditionellt svenskt kortspel som spelas med en egen, namngiven kortlek istället för en vanlig fransk 52-korts lek. Reglerna har ofta förts vidare muntligt inom familjer och vänskapskretsar, så mindre variationer — som just neken-regeln eller gränsen för låg pott — kan skilja sig mellan olika sällskap. De regler som beskrivs ovan är den variant den här appen är byggd för.</p>
-            <p>Under fliken <em>Historik</em> i appen hittar ni istället ert eget sällskaps spelade omgångar och matcher.</p>
+            <p>Killekort är den svenska grenen av en europeisk familj av färglösa kortlekar – korten saknar alltså hjärter, spader och andra sviter. Familjen omfattar italienska Cuccù, tyska Vogelspiel/Hexenspiel, danska och norska Gnav samt svenska Kille.</p>
+
+            <h4>Från Cuccù till Kille</h4>
+            <p>Spelets grundidé är äldre än själva killekortleken. Bytes- och utslagningsspel av typen "gök" förekom i Frankrike och Italien under 1500-talet, ursprungligen med vanliga spelkort. Den särskilda illustrerade Cuccù-leken utvecklades sannolikt i Italien omkring slutet av 1600-talet eller början av 1700-talet. Därifrån spreds leken norrut genom Europa.</p>
+            <p>Det är därför något förenklat att beskriva killekort som en direkt fransk uppfinning. Speltypen har äldre franska och italienska föregångare, men den särskilda kortleken har tydligast italienskt ursprung.</p>
+
+            <h4>Kille kommer till Sverige</h4>
+            <p>Den första kända svenska uppgiften är från 1741, då spelet kallades Campio, Cambio eller liknande. Namnet kommer från italienskans <em>cambio</em>, "byte", vilket syftar på att spelarna byter kort i den ursprungliga spelvarianten. Spelet var särskilt populärt i Sverige under mitten av 1700-talet.</p>
+            <p>Benämningen Kille är belagd från 1833 och blev allmän under 1800-talets mitt. Namnet tros vara en svensk förkortning eller ombildning av Harlekin, det särskilda gycklarkortet i leken, men etymologin är inte helt säker. Svenska Akademiens ordbok skriver uttryckligen "möjligen" om denna förklaring.</p>
+
+            <h4>Den svenska kortleken</h4>
+            <p>Den etablerade svenska killeleken består av 42 kort: två exemplar av 21 olika valörer:</p>
+            <ul>
+              <li>Harlekin eller Kille</li>
+              <li>Kuku</li>
+              <li>Husar</li>
+              <li>Husu</li>
+              <li>Kavall</li>
+              <li>Värdshus</li>
+              <li>Nummer 1–12</li>
+              <li>Kransen</li>
+              <li>Blompottan</li>
+              <li>Blaren</li>
+            </ul>
+            <p>Museibevarade lekar visar stavningar som Arleqin, Cucu, Cavall och Wärdshus, vilket speglar äldre språkbruk och lekens internationella bakgrund. Nummerkorten är vanligen illustrerade med franska liljor.</p>
+            <p>Figurerna motsvarar delvis äldre Cuccù- och Gnavkort, men har försvenskats. Den italienska göken blev Kuku, ryttaren blev Kavall, soldaten Husar, och andra bilder utvecklades till bland annat Husu, Värdshus, Blompotta och Blaren.</p>
+
+            <h4>Från hasardspel till svensk speltradition</h4>
+            <p>Kille var ursprungligen framför allt ett hasard- och penningspel för vuxna. Med tiden utvecklades flera svenska spel med samma lek, exempelvis:</p>
+            <ul>
+              <li>Byteskille</li>
+              <li>Krypkille</li>
+              <li>Knackkille</li>
+              <li>Auktionskille</li>
+              <li>Femkortskille</li>
+            </ul>
+            <p>Det är en viktig skillnad mot den italienska föregångaren: svenskarna behöll kortleken men utvecklade flera nya stick- och budspel kring den.</p>
+
+            <h4>Bevarade svenska lekar</h4>
+            <p>Blekinge museum har en killelek från Gefle Fabrik, tillverkad någon gång efter 1832 och före 1863. Korten har bevillnings- och kontrollstämplar, vilket visar att de ingick i den reglerade svenska spelkortstillverkningen.</p>
+            <p>Sörmlands museum har en lek tillverkad av Alexander Boman i Stockholm under 1860-talet, med svart tryck och röd- respektive blåprickiga baksidor. Sådana museiföremål visar att den bildvärld som används i moderna killekort redan var etablerad under 1800-talet.</p>
+
+            <h4>Sammanfattad tidslinje</h4>
+            <div class="rules-table-wrap">
+              <table class="rules-table">
+                <thead>
+                  <tr><th>Period</th><th>Utveckling</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>1500-talet</td><td>Gök- och bytesspel förekommer i Frankrike och Italien</td></tr>
+                  <tr><td>Cirka 1700</td><td>Särskilda italienska Cuccù-kortlekar utvecklas</td></tr>
+                  <tr><td>1700-talet</td><td>Kortleken sprids till Tyskland och Skandinavien</td></tr>
+                  <tr><td>1741</td><td>Första svenska belägget, under namnet Campio/Cambio</td></tr>
+                  <tr><td>1750-talet</td><td>Spelets svenska storhetstid</td></tr>
+                  <tr><td>1833</td><td>Namnet Kille beläggs</td></tr>
+                  <tr><td>1800-talets mitt</td><td>Kille blir det vanliga svenska namnet</td></tr>
+                  <tr><td>1800–1900-talet</td><td>Svenska varianter som krypkille och knackkille utvecklas</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h4>Referenser</h4>
+            <ol class="rules-refs">
+              <li>Blekinge museum, föremål Blm 30061 – historik, kortstruktur och svensk datering.</li>
+              <li>Sörmlands museum, SLM 5131 – killekort tillverkade av A. Boman på 1860-talet.</li>
+              <li>Svenska Akademiens ordbok, uppslagsordet <em>kille</em> – etymologi och äldre svenska belägg.</li>
+              <li>International Playing-Card Society, Kimihiko Kuromiya, <em>A Note on the History of Cuccù</em>.</li>
+              <li>Store norske leksikon, <em>gnav</em> – den skandinaviska spelfamiljens bakgrund.</li>
+              <li>Pagat, <em>Games played with single-suited cards</em> – jämförelse mellan Cuccù, Gnav och Kille.</li>
+            </ol>
           </div>
         </details>
       </div>
