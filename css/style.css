@@ -2058,51 +2058,114 @@ body {
   margin-bottom: var(--space-xs);
 }
 
-.histogram__row {
+.histogram__legend {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
-  padding: 2px 0;
-}
-
-.histogram__label {
-  flex: 0 0 auto;
-  min-width: 84px;
+  gap: var(--space-xs);
   font-size: 0.75rem;
-  font-variant-numeric: tabular-nums;
   color: var(--text-muted);
-  white-space: nowrap;
+  padding-bottom: var(--space-sm);
 }
 
-.histogram__bar-wrap {
-  flex: 1;
+.histogram__key {
+  width: 12px;
   height: 10px;
-  background: var(--cream-200);
-  border-radius: 5px;
-  overflow: hidden;
+  border-radius: 2px;
+  margin-left: var(--space-sm);
+}
+.histogram__legend .histogram__key:first-child {
+  margin-left: 0;
+}
+
+.histogram__key--reference {
+  background: var(--cream-400);
+}
+
+.histogram__key--primary {
+  background: var(--green-400);
+}
+
+/* The score axis runs horizontally: losses left, wins right. */
+.histogram__scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.histogram__plot {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 150px;
+  min-width: 100%;
+}
+
+.histogram__col {
+  flex: 1 0 auto;
+  min-width: 10px;
+  display: flex;
+  flex-direction: column;
+}
+
+.histogram__col--zero {
+  border-left: 1px dashed var(--cream-400);
+}
+
+.histogram__bars {
+  position: relative;
+  flex: 1;
+  border-bottom: 1px solid var(--cream-300);
 }
 
 .histogram__bar {
-  height: 100%;
-  border-radius: 5px;
-  transition: width var(--transition-base);
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  border-radius: 2px 2px 0 0;
+  transition: height var(--transition-base);
+}
+
+/* The overall distribution sits behind the player's own bars. */
+.histogram__bar--reference {
+  background: var(--cream-400);
+}
+
+.histogram__bar--positive,
+.histogram__bar--negative {
+  left: 20%;
+  right: 20%;
+}
+
+/* Without a reference series behind it the bar has the column to itself. */
+.histogram__plot--single .histogram__bar--positive,
+.histogram__plot--single .histogram__bar--negative {
+  left: 0;
+  right: 0;
 }
 
 .histogram__bar--positive {
-  background: linear-gradient(90deg, var(--green-400), var(--green-600));
+  background: linear-gradient(180deg, var(--green-400), var(--green-600));
 }
 
 .histogram__bar--negative {
-  background: linear-gradient(90deg, var(--red-400), var(--red-600));
+  background: linear-gradient(180deg, var(--red-400), var(--red-600));
 }
 
-.histogram__count {
-  font-weight: 600;
-  font-size: 0.8rem;
+.histogram__tick {
+  height: 16px;
+  padding-top: 3px;
+  font-size: 0.6rem;
+  line-height: 1;
   color: var(--text-muted);
-  min-width: 28px;
-  text-align: right;
+  text-align: center;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.histogram__axis-note {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  padding-top: var(--space-xs);
 }
 
 /* ─── Card-player heatmap ────────────────────────────────────────────────── */

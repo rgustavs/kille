@@ -1772,31 +1772,61 @@ function renderStatsTab(tab) {
 }
 
 /**
- * Render a score distribution as a histogram of horizontal bars,
- * the highest scores at the top and the heaviest losses at the bottom.
+ * Render a score distribution as columns along a horizontal score axis:
+ * losses to the left, wins to the right, bar height = share of the values.
+ * With two series the second is drawn in front of the first, so a single
+ * player can be read against the overall distribution.
  */
-function histogramHtml(title, values, unit) {
-  const hist = buildHistogram(values);
+function histogramHtml(title, series, unit) {
+  const hist = buildHistogram(series);
   if (!hist) return '';
 
-  const rows = [...hist.buckets].reverse().map(b => {
-    const pct = Math.round(b.count / hist.maxCount * 100);
-    const cls = b.from >= 0 ? 'histogram__bar--positive' : 'histogram__bar--negative';
-    return `<div class="histogram__row">
-      <span class="histogram__label">${formatScore(b.from)}…${formatScore(b.to - 1)}</span>
-      <div class="histogram__bar-wrap"><div class="histogram__bar ${cls}" style="width: ${pct}%"></div></div>
-      <span class="histogram__count">${b.count}</span>
+  const primary = hist.series[hist.series.length - 1];
+  const reference = hist.series.length > 1 ? hist.series[0] : null;
+  const scale = hist.maxShare || 100;
+
+  // Label the axis at the zero boundary and at even intervals from there.
+  const zeroIndex = hist.buckets.findIndex(b => b.from === 0);
+  const tickEvery = Math.max(1, Math.ceil(hist.buckets.length / 7));
+
+  const columns = hist.buckets.map((b, i) => {
+    const tick = Math.abs(i - (zeroIndex < 0 ? 0 : zeroIndex)) % tickEvery === 0
+      ? `${formatScore(b.from)}` : '';
+    const bars = hist.series.map(s => {
+      const entry = b.values[s.key];
+      const height = entry.share / scale * 100;
+      const kind = s.key === primary.key
+        ? (b.from >= 0 ? 'histogram__bar--positive' : 'histogram__bar--negative')
+        : 'histogram__bar--reference';
+      return `<div class="histogram__bar ${kind}" style="height: ${height.toFixed(1)}%"></div>`;
+    }).join('');
+    const tip = hist.series.map(s =>
+      `${escHtml(s.label)}: ${b.values[s.key].count} (${b.values[s.key].share}%)`).join(' · ');
+    return `<div class="histogram__col${b.from === 0 ? ' histogram__col--zero' : ''}"
+      title="${formatScore(b.from)}…${formatScore(b.to - 1)} — ${tip}">
+      <div class="histogram__bars">${bars}</div>
+      <span class="histogram__tick">${tick}</span>
     </div>`;
   }).join('');
+
+  const legend = reference ? `
+    <div class="histogram__legend">
+      <span class="histogram__key histogram__key--reference"></span>${escHtml(reference.label)}
+      <span class="histogram__key histogram__key--primary"></span>${escHtml(primary.label)}
+    </div>` : '';
 
   return `
     <h3 class="stats-section-title">${escHtml(title)}</h3>
     <div class="histogram">
       <div class="histogram__meta">
-        ${hist.total} ${escHtml(unit)} &middot; snitt ${formatScore(hist.average)} &middot;
-        lägst ${formatScore(hist.min)} &middot; högst ${formatScore(hist.max)}
+        ${primary.total} ${escHtml(unit)} &middot; snitt ${formatScore(primary.average)} &middot;
+        lägst ${formatScore(primary.min)} &middot; högst ${formatScore(primary.max)}
       </div>
-      ${rows}
+      ${legend}
+      <div class="histogram__scroll">
+        <div class="histogram__plot${reference ? '' : ' histogram__plot--single'}">${columns}</div>
+      </div>
+      <div class="histogram__axis-note">Andel av ${escHtml(unit)} per ${hist.bucketSize} poäng (topp ${hist.maxShare}%)</div>
     </div>`;
 }
 
@@ -1804,8 +1834,10 @@ function renderScoreDistribution() {
   const container = $('#scores-content');
   const { roundScores, gameScores } = cachedStats.scores;
 
-  const html = histogramHtml('Omgångspoäng — alla spelare', roundScores, 'omgångar')
-    + histogramHtml('Spelpoäng — alla spelare', gameScores, 'spelresultat');
+  const html = histogramHtml('Omgångspoäng — alla spelare',
+      [{ key: 'all', label: 'Alla spelare', values: roundScores }], 'omgångar')
+    + histogramHtml('Spelpoäng — alla spelare',
+      [{ key: 'all', label: 'Alla spelare', values: gameScores }], 'spelresultat');
 
   container.innerHTML = html
     || '<div class="empty-state"><div class="empty-state__text">Ingen poängdata ännu.</div></div>';
@@ -1893,9 +1925,15 @@ function renderPlayerDetail(playerId) {
       </div>`;
   }
 
-  // Score distributions for this player
-  const roundHistHtml = histogramHtml('Fördelning — omgångspoäng', ps.roundScores, 'omgångar');
-  const gameHistHtml = histogramHtml('Fördelning — spelpoäng', ps.scoreHistory.map(h => h.score), 'spelresultat');
+  // Score distributions, with the overall distribution behind them for comparison
+  const roundHistHtml = histogramHtml('Fördelning — omgångspoäng', [
+    { key: 'all', label: 'Alla spelare', values: cachedStats.scores.roundScores },
+    { key: 'player', label: player.name, values: ps.roundScores },
+  ], 'omgångar');
+  const gameHistHtml = histogramHtml('Fördelning — spelpoäng', [
+    { key: 'all', label: 'Alla spelare', values: cachedStats.scores.gameScores },
+    { key: 'player', label: player.name, values: ps.scoreHistory.map(h => h.score) },
+  ], 'spelresultat');
 
   // Card frequency (loser) — Harlekin first, Blaren last
   let cardHtml = '';

@@ -1,5 +1,7 @@
 import assert from 'assert';
-import { computeAdvancedStats, getCardsInDisplayOrder, buildHistogram } from '../js/stats.js';
+import {
+  computeAdvancedStats, getCardsInDisplayOrder, buildHistogram, HISTOGRAM_BUCKET_SIZE
+} from '../js/stats.js';
 import { CARDS } from '../js/cards.js';
 
 /** Build a completed 2-player game where `winnerId` wins a single round. */
@@ -72,18 +74,22 @@ function runTests() {
     console.error('❌ card display order failed', err);
   }
 
-  // Test: histogram buckets are aligned on zero, so no bucket mixes wins with
+  // Test: 20-point buckets aligned on zero, so no bucket mixes wins with
   // losses, and every value lands in exactly one bucket.
   try {
     assert.strictEqual(buildHistogram([]), null);
+    assert.strictEqual(buildHistogram([{ key: 'a', values: [] }]), null);
 
-    const hist = buildHistogram([-70, -50, -5, 0, 5, 50, 215]);
+    const values = [-70, -50, -5, 0, 5, 50, 215];
+    const hist = buildHistogram([{ key: 'all', values }]);
+    assert.strictEqual(hist.bucketSize, HISTOGRAM_BUCKET_SIZE);
+    assert.strictEqual(hist.bucketSize, 20);
     assert.ok(hist.buckets.every(b => b.from >= 0 || b.to <= 0), 'no bucket straddles zero');
     assert.ok(hist.buckets.some(b => b.from === 0), 'a bucket starts at zero');
-    assert.strictEqual(hist.buckets.reduce((sum, b) => sum + b.count, 0), 7);
-    assert.strictEqual(hist.total, 7);
-    assert.strictEqual(hist.min, -70);
-    assert.strictEqual(hist.max, 215);
+    assert.strictEqual(hist.buckets.reduce((sum, b) => sum + b.values.all.count, 0), values.length);
+    assert.strictEqual(hist.series[0].total, values.length);
+    assert.strictEqual(hist.series[0].min, -70);
+    assert.strictEqual(hist.series[0].max, 215);
 
     // Buckets are contiguous and ordered from the lowest score upwards.
     hist.buckets.forEach((b, i) => {
@@ -92,15 +98,43 @@ function runTests() {
     });
     assert.ok(hist.buckets[0].from <= -70 && hist.buckets[hist.buckets.length - 1].to > 215);
 
-    // A single repeated value still produces one bucket holding everything.
-    const flat = buildHistogram([25, 25, 25]);
-    assert.strictEqual(flat.total, 3);
-    assert.strictEqual(flat.maxCount, 3);
-    assert.strictEqual(flat.average, 25);
+    // -5 and 0 are neighbours but must not share a bucket.
+    const negative = hist.buckets.find(b => b.from === -20);
+    const positive = hist.buckets.find(b => b.from === 0);
+    assert.strictEqual(negative.values.all.count, 1);
+    assert.strictEqual(positive.values.all.count, 2);
     console.log('✅ score histogram passes');
   } catch (err) {
     failures++;
     console.error('❌ score histogram failed', err);
+  }
+
+  // Test: two series share one bucket range and are comparable by share,
+  // even when one series holds far more values than the other.
+  try {
+    const hist = buildHistogram([
+      { key: 'all', label: 'Alla', values: [-100, -20, -20, 10, 10, 10, 10, 200] },
+      { key: 'player', label: 'A', values: [10, 10] },
+    ]);
+
+    // Both series span the same buckets, driven by the widest of them.
+    assert.strictEqual(hist.buckets[0].from, -100);
+    assert.strictEqual(hist.buckets[hist.buckets.length - 1].to, 220);
+    hist.buckets.forEach(b => {
+      assert.ok('all' in b.values && 'player' in b.values);
+    });
+
+    const bucket = hist.buckets.find(b => b.from === 0);
+    assert.strictEqual(bucket.values.all.count, 4);
+    assert.strictEqual(bucket.values.all.share, 50);   // 4 of 8
+    assert.strictEqual(bucket.values.player.count, 2);
+    assert.strictEqual(bucket.values.player.share, 100); // 2 of 2
+    assert.strictEqual(hist.maxShare, 100);
+    assert.deepStrictEqual(hist.series.map(s => s.key), ['all', 'player']);
+    console.log('✅ histogram series comparison passes');
+  } catch (err) {
+    failures++;
+    console.error('❌ histogram series comparison failed', err);
   }
 
   // Test: round scores feed the distributions, and a non-counted round is left out.

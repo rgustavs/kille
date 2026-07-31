@@ -256,53 +256,71 @@ export function computeAdvancedStats(games, players) {
   return { players: playerStats, cards: cardStats, records, scores };
 }
 
-/** Bucket sizes a histogram may snap to, smallest first. */
-const HISTOGRAM_BUCKET_SIZES = [5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000];
+/** Width of a histogram bucket, in points. */
+export const HISTOGRAM_BUCKET_SIZE = 20;
 
 /**
- * Bucket a list of scores into a histogram.
- * Bucket edges are aligned on zero, so no bucket straddles it and every
- * bucket is either entirely a win or entirely a loss.
- * @param {number[]} values - The scores to distribute
- * @param {object} [options] - { maxBuckets } upper bound on the bucket count
- * @returns {object|null} { bucketSize, buckets, maxCount, total, min, max, average }
+ * Bucket one or more score series into a shared histogram, so the series can
+ * be compared column by column. Bucket edges are aligned on zero, so no
+ * bucket straddles it and every bucket is either entirely a win or a loss.
+ *
+ * Series are compared by frequency: each bucket carries the share (in percent)
+ * of that series' own values, which makes a single player comparable to the
+ * much larger overall distribution.
+ *
+ * @param {object[]} series - [{ key, values: number[] }], first is the primary
+ * @param {object} [options] - { bucketSize }
+ * @returns {object|null} { bucketSize, buckets, series, maxShare }
  */
-export function buildHistogram(values, { maxBuckets = 12 } = {}) {
-  if (!Array.isArray(values) || values.length === 0) return null;
+export function buildHistogram(series, { bucketSize = HISTOGRAM_BUCKET_SIZE } = {}) {
+  const populated = (series || []).filter(s => Array.isArray(s.values) && s.values.length > 0);
+  if (populated.length === 0) return null;
 
-  let min = values[0];
-  let max = values[0];
-  let sum = 0;
-  values.forEach(v => {
-    if (v < min) min = v;
-    if (v > max) max = v;
-    sum += v;
+  const summaries = populated.map(s => {
+    let min = s.values[0];
+    let max = s.values[0];
+    let sum = 0;
+    s.values.forEach(v => {
+      if (v < min) min = v;
+      if (v > max) max = v;
+      sum += v;
+    });
+    return {
+      key: s.key,
+      label: s.label || s.key,
+      total: s.values.length,
+      min,
+      max,
+      average: Math.round(sum / s.values.length * 10) / 10,
+    };
   });
 
-  const span = max - min;
-  const bucketSize = HISTOGRAM_BUCKET_SIZES.find(size => span / size < maxBuckets)
-    || HISTOGRAM_BUCKET_SIZES[HISTOGRAM_BUCKET_SIZES.length - 1];
-
-  const firstIndex = Math.floor(min / bucketSize);
-  const lastIndex = Math.floor(max / bucketSize);
+  // One shared bucket range covering every series.
+  const firstIndex = Math.floor(Math.min(...summaries.map(s => s.min)) / bucketSize);
+  const lastIndex = Math.floor(Math.max(...summaries.map(s => s.max)) / bucketSize);
   const buckets = [];
   for (let i = firstIndex; i <= lastIndex; i++) {
-    buckets.push({ from: i * bucketSize, to: (i + 1) * bucketSize, count: 0 });
+    buckets.push({ from: i * bucketSize, to: (i + 1) * bucketSize, values: {} });
   }
-  values.forEach(v => {
-    const bucket = buckets[Math.floor(v / bucketSize) - firstIndex];
-    if (bucket) bucket.count++;
+  buckets.forEach(b => populated.forEach(s => { b.values[s.key] = { count: 0, share: 0 }; }));
+
+  populated.forEach(s => {
+    s.values.forEach(v => {
+      const bucket = buckets[Math.floor(v / bucketSize) - firstIndex];
+      if (bucket) bucket.values[s.key].count++;
+    });
   });
 
-  return {
-    bucketSize,
-    buckets,
-    maxCount: buckets.reduce((m, b) => Math.max(m, b.count), 0),
-    total: values.length,
-    min,
-    max,
-    average: Math.round(sum / values.length * 10) / 10,
-  };
+  let maxShare = 0;
+  buckets.forEach(b => {
+    summaries.forEach(s => {
+      const entry = b.values[s.key];
+      entry.share = Math.round(entry.count / s.total * 1000) / 10;
+      if (entry.share > maxShare) maxShare = entry.share;
+    });
+  });
+
+  return { bucketSize, buckets, series: summaries, maxShare };
 }
 
 /**
