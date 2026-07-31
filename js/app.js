@@ -1824,7 +1824,7 @@ function renderPlayerDetail(playerId) {
   const avgScore = ps.avgScorePerRound;
   const avgClass = avgScore > 0 ? 'positive' : avgScore < 0 ? 'negative' : '';
 
-  // Score history chart
+  // Score history chart — zero on the middle line, wins up and losses down
   let chartHtml = '';
   if (ps.scoreHistory.length > 1) {
     const scores = ps.scoreHistory.map(h => h.score);
@@ -1833,11 +1833,18 @@ function renderPlayerDetail(playerId) {
       <h3 class="stats-section-title">Poängutveckling</h3>
       <div class="score-chart">
         <div class="score-chart__bars">
+          <div class="score-chart__zero-line"></div>
           ${scores.map(s => {
-            const pct = Math.round(Math.abs(s) / maxAbs * 100);
+            // Half the chart height is the full scale, so zero stays in the middle.
+            const pct = s === 0 ? 0 : Math.max(Math.abs(s) / maxAbs * 50, 2);
             const cls = s >= 0 ? 'score-chart__bar--positive' : 'score-chart__bar--negative';
-            return `<div class="score-chart__bar ${cls}" style="height: ${Math.max(pct, 4)}%" title="${s > 0 ? '+' : ''}${s}"></div>`;
+            return `<div class="score-chart__slot" title="${s > 0 ? '+' : ''}${s}">
+              <div class="score-chart__bar ${cls}" style="height: ${pct.toFixed(1)}%"></div>
+            </div>`;
           }).join('')}
+        </div>
+        <div class="score-chart__scale">
+          <span>+${maxAbs}</span><span>0</span><span>-${maxAbs}</span>
         </div>
       </div>`;
   }
@@ -1884,9 +1891,10 @@ function renderPlayerDetail(playerId) {
       </div>`;
   }
 
-  // Head-to-head
+  // Head-to-head — most played opponent first
   let h2hHtml = '';
-  const opponents = Object.entries(ps.opponents);
+  const opponents = Object.entries(ps.opponents)
+    .sort((a, b) => (b[1].wins + b[1].losses) - (a[1].wins + a[1].losses) || b[1].wins - a[1].wins);
   if (opponents.length > 0) {
     h2hHtml = `
       <h3 class="stats-section-title">Mot andra spelare</h3>
