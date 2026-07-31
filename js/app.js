@@ -2,13 +2,13 @@
  * Kille Score Calculator — App UI
  * Handles all screen navigation, rendering, and user interactions.
  */
-import { CARDS, getCardById, getCardsByType } from './cards.js';
+import { CARDS, getCardById, getCardsByType, cardRank, sortCardsByRank } from './cards.js';
 import { PlayerStore, GameStore } from './store.js';
 import {
   createGame, addRound, removeLastRound, completeGame, calculateScoreTable,
   NEKEN_PENALTY, LOW_STAKE_THRESHOLD
 } from './game.js';
-import { computeAdvancedStats, getMostCommonCard, getMostCommonWinnerCard, getTopCards, getLeaderboard } from './stats.js';
+import { computeAdvancedStats, getMostCommonCard, getMostCommonWinnerCard, getCardsInDisplayOrder, getLeaderboard } from './stats.js';
 import { GroupData } from './store.js';
 import { downloadExport, importFile } from './importexport.js';
 import { $, $$, escHtml, avatarInitial, formatScore, showToast, addSwipeToDismiss } from './dom.js';
@@ -1023,10 +1023,9 @@ function startGame() {
 // ACTIVE GAME — PROTOCOL TABLE
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Build the <tbody> HTML for a protocol table (newest round first). */
+/** Build the <tbody> HTML for a protocol table (oldest round first, newest last). */
 function buildProtocolBody(table, players) {
-  const reversedRounds = [...table.rounds].reverse();
-  return reversedRounds.map(round => {
+  return table.rounds.map(round => {
     const isVoid = round.counted === false;
     const cells = players.map(p => {
       const s = round.scores[p.id];
@@ -1096,11 +1095,30 @@ function renderGame() {
     ${players.map(p => `<th>${escHtml(p.name)}</th>`).join('')}
   </tr>`;
 
-  // Body (newest round at top)
+  // Body (newest round at the bottom)
   $('#protocol-body').innerHTML = buildProtocolBody(table, players);
 
   // Footer (totals)
   $('#protocol-foot').innerHTML = buildProtocolFoot(table, players);
+
+  scrollToLatestRound();
+}
+
+/**
+ * Keep the newest round and the totals in view — the protocol grows downwards.
+ * Deferred so it runs after the navigation's scroll-to-top.
+ */
+function scrollToLatestRound() {
+  const wrapper = $('#protocol-wrapper');
+  if (!wrapper || wrapper.style.display === 'none') return;
+  requestAnimationFrame(() => {
+    if (currentScreen !== 'game') return;
+    // The action bar is fixed over the content, so keep clear of it.
+    const actionsHeight = $('.game-actions')?.offsetHeight || 0;
+    const bottom = wrapper.getBoundingClientRect().bottom + window.scrollY;
+    const target = bottom - window.innerHeight + actionsHeight + 16;
+    if (target > window.scrollY) window.scrollTo(0, target);
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1439,7 +1457,7 @@ function cardVisual(card, modifier) {
 }
 
 function renderCardValues() {
-  const sorted = [...CARDS].sort((a, b) => b.points - a.points);
+  const sorted = sortCardsByRank(CARDS);
 
   $('#card-values-overview').innerHTML = sorted.map(c => `
     <div class="cv-tile">
@@ -1467,7 +1485,7 @@ function renderCardValues() {
 function renderCardValuesPrint() {
   const groups = ['picture', 'number', 'zero'];
   $('#card-values-print-groups').innerHTML = groups.map(type => {
-    const cards = getCardsByType(type).sort((a, b) => b.points - a.points);
+    const cards = sortCardsByRank(getCardsByType(type));
     if (!cards.length) return '';
     const rows = cards.map(c => `
       <div class="cv-print__card">
@@ -1488,10 +1506,10 @@ function renderCardValuesPrint() {
 // CARD PICKER
 // ═══════════════════════════════════════════════════════════════════════════
 function initCardPicker() {
-  // Render card grids (static, done once)
-  renderCardGroup('#picker-picture-cards', getCardsByType('picture'));
-  renderCardGroup('#picker-number-cards', getCardsByType('number'));
-  renderCardGroup('#picker-zero-cards', getCardsByType('zero'));
+  // Render card grids (static, done once) — same order as everywhere else
+  renderCardGroup('#picker-picture-cards', sortCardsByRank(getCardsByType('picture')));
+  renderCardGroup('#picker-number-cards', sortCardsByRank(getCardsByType('number')));
+  renderCardGroup('#picker-zero-cards', sortCardsByRank(getCardsByType('zero')));
 }
 
 function renderCardGroup(selector, cards) {
@@ -1824,13 +1842,13 @@ function renderPlayerDetail(playerId) {
       </div>`;
   }
 
-  // Card frequency (loser)
+  // Card frequency (loser) — Harlekin first, Blaren last
   let cardHtml = '';
-  const cardEntries = Object.entries(ps.cardFrequency).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const cardEntries = Object.entries(ps.cardFrequency).sort((a, b) => cardRank(a[0]) - cardRank(b[0]));
   if (cardEntries.length > 0) {
-    const maxCount = cardEntries[0][1];
+    const maxCount = Math.max(...cardEntries.map(e => e[1]));
     cardHtml = `
-      <h3 class="stats-section-title">Vanligaste kort (förlorare)</h3>
+      <h3 class="stats-section-title">Kort som förlorare</h3>
       <div class="card-freq-list">
         ${cardEntries.map(([cardId, count]) => {
           const card = getCardById(cardId);
@@ -1845,13 +1863,13 @@ function renderPlayerDetail(playerId) {
       </div>`;
   }
 
-  // Winner card frequency
+  // Winner card frequency — Harlekin first, Blaren last
   let winnerCardHtml = '';
-  const winnerCardEntries = Object.entries(ps.winnerCardFrequency).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const winnerCardEntries = Object.entries(ps.winnerCardFrequency).sort((a, b) => cardRank(a[0]) - cardRank(b[0]));
   if (winnerCardEntries.length > 0) {
-    const maxCount = winnerCardEntries[0][1];
+    const maxCount = Math.max(...winnerCardEntries.map(e => e[1]));
     winnerCardHtml = `
-      <h3 class="stats-section-title">Vanligaste vinnarkort</h3>
+      <h3 class="stats-section-title">Vinnarkort</h3>
       <div class="card-freq-list">
         ${winnerCardEntries.map(([cardId, count]) => {
           const card = getCardById(cardId);
@@ -1962,26 +1980,20 @@ function renderPlayerDetail(playerId) {
 
 function renderCardStats() {
   const container = $('#cards-content');
-  const topCards = getTopCards(cachedStats.cards, 20);
+  // The whole deck, always in the same order: Harlekin first, Blaren last.
+  const allCards = getCardsInDisplayOrder(cachedStats.cards);
 
-  if (topCards.length === 0) {
+  if (!allCards.some(c => c.timesPlayed > 0 || c.timesWon > 0)) {
     container.innerHTML = '<div class="empty-state"><div class="empty-state__text">Ingen kortdata ännu.</div></div>';
     return;
   }
 
-  const maxPlayed = Math.max(...topCards.map(c => c.timesPlayed));
-
-  // Collect all cards for heatmap (both loser and winner)
-  const allHeatmapCards = Object.values(cachedStats.cards)
-    .filter(c => c.timesPlayed > 0 || c.timesWon > 0)
-    .sort((a, b) => b.points - a.points || b.timesPlayed - a.timesPlayed)
-    .slice(0, 20);
+  const maxPlayed = Math.max(...allCards.map(c => c.timesPlayed), 1);
 
   const freqKey = heatmapMode === 'winner' ? 'winnerFrequency' : 'playerFrequency';
-  const heatmapCards = allHeatmapCards.filter(c => Object.keys(c[freqKey]).length > 0 || (heatmapMode === 'loser' ? c.timesPlayed > 0 : c.timesWon > 0));
 
   const playerTotals = {};
-  heatmapCards.forEach(c => {
+  allCards.forEach(c => {
     Object.entries(c[freqKey]).forEach(([pid, cnt]) => {
       playerTotals[pid] = (playerTotals[pid] || 0) + cnt;
     });
@@ -1992,7 +2004,7 @@ function renderCardStats() {
 
   // Global max cell value for color scaling
   const globalMax = heatmapPlayers.length > 0
-    ? Math.max(...heatmapCards.flatMap(c => heatmapPlayers.map(p => c[freqKey][p.id] || 0)), 1)
+    ? Math.max(...allCards.flatMap(c => heatmapPlayers.map(p => c[freqKey][p.id] || 0)), 1)
     : 1;
 
   function heatColor(val) {
@@ -2029,7 +2041,7 @@ function renderCardStats() {
           </tr>
         </thead>
         <tbody>
-          ${heatmapCards.map(c => {
+          ${allCards.map(c => {
             return `<tr>
               <td class="hm-card-label">${escHtml(c.name)}</td>
               <td class="hm-card-pts">${c.points}</td>
@@ -2045,17 +2057,13 @@ function renderCardStats() {
       </table>
     </div>`;
 
-  // Winner cards section
-  const winnerCards = Object.values(cachedStats.cards)
-    .filter(c => c.timesWon > 0)
-    .sort((a, b) => b.points - a.points || b.timesWon - a.timesWon)
-    .slice(0, 20);
-  const maxWon = winnerCards.length > 0 ? Math.max(...winnerCards.map(c => c.timesWon)) : 1;
+  // Winner cards section (hidden entirely when no winner cards are registered)
+  const maxWon = Math.max(...allCards.map(c => c.timesWon), 1);
 
-  const winnerCardsHtml = winnerCards.length > 0 ? `
-    <h3 class="stats-section-title">Mest vinnande kort</h3>
+  const winnerCardsHtml = allCards.some(c => c.timesWon > 0) ? `
+    <h3 class="stats-section-title">Vinnande kort</h3>
     <div class="card-freq-list">
-      ${winnerCards.map(c => {
+      ${allCards.map(c => {
         const pct = Math.round(c.timesWon / maxWon * 100);
         return `<div class="card-freq-item">
           <span class="card-freq-name">${escHtml(c.name)} <span style="color:var(--text-muted);font-size:0.75rem">${c.points}p</span></span>
@@ -2066,9 +2074,9 @@ function renderCardStats() {
     </div>` : '';
 
   container.innerHTML = `
-    <h3 class="stats-section-title">Mest spelade kort (förlorare)</h3>
+    <h3 class="stats-section-title">Kort som förlorare</h3>
     <div class="card-freq-list">
-      ${topCards.map(c => {
+      ${allCards.map(c => {
         const pct = Math.round(c.timesPlayed / maxPlayed * 100);
         return `<div class="card-freq-item">
           <span class="card-freq-name">${escHtml(c.name)} <span style="color:var(--text-muted);font-size:0.75rem">${c.points}p</span></span>
