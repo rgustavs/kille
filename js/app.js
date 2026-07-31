@@ -1023,10 +1023,9 @@ function startGame() {
 // ACTIVE GAME — PROTOCOL TABLE
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Build the <tbody> HTML for a protocol table (newest round first). */
+/** Build the <tbody> HTML for a protocol table (oldest round first, newest last). */
 function buildProtocolBody(table, players) {
-  const reversedRounds = [...table.rounds].reverse();
-  return reversedRounds.map(round => {
+  return table.rounds.map(round => {
     const isVoid = round.counted === false;
     const cells = players.map(p => {
       const s = round.scores[p.id];
@@ -1096,11 +1095,30 @@ function renderGame() {
     ${players.map(p => `<th>${escHtml(p.name)}</th>`).join('')}
   </tr>`;
 
-  // Body (newest round at top)
+  // Body (newest round at the bottom)
   $('#protocol-body').innerHTML = buildProtocolBody(table, players);
 
   // Footer (totals)
   $('#protocol-foot').innerHTML = buildProtocolFoot(table, players);
+
+  scrollToLatestRound();
+}
+
+/**
+ * Keep the newest round and the totals in view — the protocol grows downwards.
+ * Deferred so it runs after the navigation's scroll-to-top.
+ */
+function scrollToLatestRound() {
+  const wrapper = $('#protocol-wrapper');
+  if (!wrapper || wrapper.style.display === 'none') return;
+  requestAnimationFrame(() => {
+    if (currentScreen !== 'game') return;
+    // The action bar is fixed over the content, so keep clear of it.
+    const actionsHeight = $('.game-actions')?.offsetHeight || 0;
+    const bottom = wrapper.getBoundingClientRect().bottom + window.scrollY;
+    const target = bottom - window.innerHeight + actionsHeight + 16;
+    if (target > window.scrollY) window.scrollTo(0, target);
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
