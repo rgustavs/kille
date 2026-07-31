@@ -86,6 +86,7 @@ function updateHeader(screenId) {
     'view-game': 'Spelprotokoll',
     stats: 'Statistik',
     cards: 'Kortvärden',
+    rules: 'Spelregler',
     group: 'Grupp',
     admin: 'Super-admin'
   };
@@ -109,6 +110,7 @@ function renderScreen(screenId) {
     case 'history': renderHistory(); break;
     case 'stats': renderStats(); break;
     case 'cards': renderCardValues(); break;
+    case 'rules': break; // static content
     case 'group': renderGroup(); break;
     case 'admin': renderAdmin(); break;
     case 'view-game': break; // rendered when entering
@@ -2343,6 +2345,7 @@ function bindEvents() {
   $('#btn-history').addEventListener('click', () => navigateTo('history'));
   $('#btn-stats').addEventListener('click', () => navigateTo('stats'));
   $('#btn-card-values').addEventListener('click', () => navigateTo('cards'));
+  $('#btn-rules').addEventListener('click', () => navigateTo('rules'));
   $('#btn-print-cards').addEventListener('click', () => window.print());
   $('#btn-export').addEventListener('click', handleExport);
   $('#btn-import').addEventListener('click', handleImport);

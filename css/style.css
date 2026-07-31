@@ -2660,6 +2660,80 @@ body {
   }
 }
 
+/* ─── Rules Screen ────────────────────────────────────────────────────────── */
+.rules-intro {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  font-style: italic;
+  margin-bottom: var(--space-lg);
+}
+
+.rules-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.rules-item {
+  border-radius: var(--radius-lg);
+  background: var(--cream-50);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.rules-item__title {
+  list-style: none;
+  cursor: pointer;
+  padding: var(--space-md);
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--green-700);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rules-item__title::-webkit-details-marker {
+  display: none;
+}
+
+.rules-item__title::after {
+  content: '+';
+  color: var(--gold-500);
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin-left: var(--space-sm);
+}
+
+.rules-item[open] > .rules-item__title::after {
+  content: '−';
+}
+
+.rules-item__body {
+  padding: 0 var(--space-md) var(--space-md);
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.rules-item__body p {
+  margin: 0 0 var(--space-sm);
+}
+
+.rules-item__body p:last-child {
+  margin-bottom: 0;
+}
+
+.rules-item__body ul {
+  margin: 0 0 var(--space-sm);
+  padding-left: 1.2rem;
+}
+
+.rules-item__body li {
+  margin-bottom: var(--space-xs);
+}
+
 /* ─── Printable Card Values Sheet (PDF) ───────────────────────────────────── */
 /* Hidden on screen; revealed only via the print stylesheet below. */
 .cv-print {
