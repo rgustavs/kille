@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kille-cache-v17';
+const CACHE_NAME = 'kille-cache-v18';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -22,11 +22,11 @@ self.addEventListener('install', (event) => {
         './js/supabase.js',
         './js/util.js',
         './manifest.json',
-        './assets/icons/history.jpg',
+        './assets/icons/history.png',
         './assets/icons/import_export.jpg',
-        './assets/icons/new_game.jpg',
-        './assets/icons/players.jpg',
-        './assets/icons/stats.jpg',
+        './assets/icons/new_game.png',
+        './assets/icons/players.png',
+        './assets/icons/stats.png',
         './assets/cards/harlekin.png',
         './assets/cards/kuku.png',
         './assets/cards/husar.png',
