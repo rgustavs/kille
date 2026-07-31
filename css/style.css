@@ -2213,6 +2213,9 @@ body {
 
 /* ─── Score history chart ────────────────────────────────────────────────── */
 .score-chart {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
   background: var(--cream-50);
   border-radius: var(--radius-md);
   padding: var(--space-md);
@@ -2221,28 +2224,59 @@ body {
   overflow: hidden;
 }
 
-.score-chart__bars {
+.score-chart__scale {
   display: flex;
-  align-items: flex-end;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 120px;
+  font-size: 0.7rem;
+  line-height: 1;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+/* Zero sits on the middle line: wins reach upwards, losses downwards. */
+.score-chart__bars {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: stretch;
   gap: 3px;
-  height: 100px;
-  padding-top: var(--space-sm);
+  height: 120px;
+  min-width: 0;
+}
+
+.score-chart__zero-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--cream-400);
+}
+
+.score-chart__slot {
+  position: relative;
+  flex: 1;
+  min-width: 8px;
 }
 
 .score-chart__bar {
-  flex: 1;
-  min-width: 8px;
-  border-radius: 3px 3px 0 0;
+  position: absolute;
+  left: 0;
+  right: 0;
   transition: height var(--transition-base);
 }
 
 .score-chart__bar--positive {
+  bottom: 50%;
   background: var(--green-400);
+  border-radius: 3px 3px 0 0;
 }
 
 .score-chart__bar--negative {
+  top: 50%;
   background: var(--red-400);
-  align-self: flex-start;
   border-radius: 0 0 3px 3px;
 }
 
