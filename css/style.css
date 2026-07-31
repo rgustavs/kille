@@ -2474,6 +2474,7 @@ body {
   object-fit: cover;
   border-radius: var(--radius-md);
   border: 2px solid var(--cream-300);
+  box-shadow: 0 0 0 6px var(--cream-100), 0 0 0 8px var(--cream-400);
 }
 
 .action-card__title {
