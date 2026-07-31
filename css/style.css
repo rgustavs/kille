@@ -2012,22 +2012,36 @@ body {
 }
 
 .card-freq-bar-wrap {
+  position: relative;
   flex: 2;
-  height: 8px;
+  height: 10px;
   background: var(--cream-200);
-  border-radius: 4px;
+  border-radius: 5px;
   overflow: hidden;
 }
 
 .card-freq-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
   height: 100%;
   background: linear-gradient(90deg, var(--green-400), var(--green-600));
-  border-radius: 4px;
+  border-radius: 5px;
   transition: width var(--transition-base);
 }
 
 .card-freq-bar--winner {
   background: linear-gradient(90deg, #d4a017, #b8860b);
+}
+
+/* Everyone else's frequency, drawn behind the player's own bar. */
+.card-freq-bar--reference {
+  background: var(--cream-400);
+}
+
+.card-freq-bar--player {
+  top: 25%;
+  height: 50%;
 }
 
 .card-freq-count {
@@ -2058,7 +2072,8 @@ body {
   margin-bottom: var(--space-xs);
 }
 
-.histogram__legend {
+/* Legend for charts that draw one series against a reference series. */
+.chart-legend {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
@@ -2067,21 +2082,21 @@ body {
   padding-bottom: var(--space-sm);
 }
 
-.histogram__key {
+.chart-legend__key {
   width: 12px;
   height: 10px;
   border-radius: 2px;
   margin-left: var(--space-sm);
 }
-.histogram__legend .histogram__key:first-child {
+.chart-legend__key:first-child {
   margin-left: 0;
 }
 
-.histogram__key--reference {
+.chart-legend__key--reference {
   background: var(--cream-400);
 }
 
-.histogram__key--primary {
+.chart-legend__key--primary {
   background: var(--green-400);
 }
 
