@@ -2,7 +2,7 @@
  * Kille Score Calculator — App UI
  * Handles all screen navigation, rendering, and user interactions.
  */
-import { CARDS, getCardById, getCardsByType, cardRank, sortCardsByRank } from './cards.js';
+import { CARDS, getCardById, getCardsByType, sortCardsByRank } from './cards.js';
 import { PlayerStore, GameStore } from './store.js';
 import {
   createGame, addRound, removeLastRound, completeGame, calculateScoreTable,
@@ -1810,9 +1810,9 @@ function histogramHtml(title, series, unit) {
   }).join('');
 
   const legend = reference ? `
-    <div class="histogram__legend">
-      <span class="histogram__key histogram__key--reference"></span>${escHtml(reference.label)}
-      <span class="histogram__key histogram__key--primary"></span>${escHtml(primary.label)}
+    <div class="chart-legend">
+      <span class="chart-legend__key chart-legend__key--reference"></span>${escHtml(reference.label)}
+      <span class="chart-legend__key chart-legend__key--primary"></span>${escHtml(primary.label)}
     </div>` : '';
 
   return `
@@ -1827,6 +1827,46 @@ function histogramHtml(title, series, unit) {
         <div class="histogram__plot${reference ? '' : ' histogram__plot--single'}">${columns}</div>
       </div>
       <div class="histogram__axis-note">Andel av ${escHtml(unit)} per ${hist.bucketSize} poäng (topp ${hist.maxShare}%)</div>
+    </div>`;
+}
+
+/**
+ * A card frequency list for one player, with everyone else's frequency drawn
+ * behind it. Both series are shares of their own totals, so a player with a
+ * handful of rounds stays comparable to the whole group. The full deck is
+ * listed in canonical order, so cards the player never uses are visible too.
+ * @param {string} totalKey - The card stat holding the overall count
+ */
+function cardFrequencyHtml(title, playerName, playerCounts, totalKey, barClass) {
+  const cards = getCardsInDisplayOrder(cachedStats.cards);
+  const playerTotal = Object.values(playerCounts).reduce((sum, n) => sum + n, 0);
+  const allTotal = cards.reduce((sum, c) => sum + c[totalKey], 0);
+  if (playerTotal === 0 && allTotal === 0) return '';
+
+  const rows = cards.map(c => ({
+    card: c,
+    count: playerCounts[c.id] || 0,
+    playerShare: playerTotal ? (playerCounts[c.id] || 0) / playerTotal * 100 : 0,
+    allShare: allTotal ? c[totalKey] / allTotal * 100 : 0,
+  }));
+  const scale = Math.max(...rows.flatMap(r => [r.playerShare, r.allShare]), 1);
+
+  return `
+    <h3 class="stats-section-title">${escHtml(title)}</h3>
+    <div class="chart-legend">
+      <span class="chart-legend__key chart-legend__key--reference"></span>Alla spelare
+      <span class="chart-legend__key chart-legend__key--primary"></span>${escHtml(playerName)}
+    </div>
+    <div class="card-freq-list">
+      ${rows.map(r => `<div class="card-freq-item"
+        title="Alla spelare: ${r.allShare.toFixed(1)}% &middot; ${escHtml(playerName)}: ${r.playerShare.toFixed(1)}% (${r.count})">
+        <span class="card-freq-name">${escHtml(r.card.name)} <span style="color:var(--text-muted);font-size:0.75rem">${r.card.points}p</span></span>
+        <div class="card-freq-bar-wrap">
+          <div class="card-freq-bar card-freq-bar--reference" style="width: ${(r.allShare / scale * 100).toFixed(1)}%"></div>
+          <div class="card-freq-bar card-freq-bar--player ${barClass}" style="width: ${(r.playerShare / scale * 100).toFixed(1)}%"></div>
+        </div>
+        <span class="card-freq-count">${r.count}</span>
+      </div>`).join('')}
     </div>`;
 }
 
@@ -1935,47 +1975,11 @@ function renderPlayerDetail(playerId) {
     { key: 'player', label: player.name, values: ps.scoreHistory.map(h => h.score) },
   ], 'spelresultat');
 
-  // Card frequency (loser) — Harlekin first, Blaren last
-  let cardHtml = '';
-  const cardEntries = Object.entries(ps.cardFrequency).sort((a, b) => cardRank(a[0]) - cardRank(b[0]));
-  if (cardEntries.length > 0) {
-    const maxCount = Math.max(...cardEntries.map(e => e[1]));
-    cardHtml = `
-      <h3 class="stats-section-title">Kort som förlorare</h3>
-      <div class="card-freq-list">
-        ${cardEntries.map(([cardId, count]) => {
-          const card = getCardById(cardId);
-          if (!card) return '';
-          const pct = Math.round(count / maxCount * 100);
-          return `<div class="card-freq-item">
-            <span class="card-freq-name">${escHtml(card.name)}</span>
-            <div class="card-freq-bar-wrap"><div class="card-freq-bar" style="width: ${pct}%"></div></div>
-            <span class="card-freq-count">${count}</span>
-          </div>`;
-        }).join('')}
-      </div>`;
-  }
-
-  // Winner card frequency — Harlekin first, Blaren last
-  let winnerCardHtml = '';
-  const winnerCardEntries = Object.entries(ps.winnerCardFrequency).sort((a, b) => cardRank(a[0]) - cardRank(b[0]));
-  if (winnerCardEntries.length > 0) {
-    const maxCount = Math.max(...winnerCardEntries.map(e => e[1]));
-    winnerCardHtml = `
-      <h3 class="stats-section-title">Vinnarkort</h3>
-      <div class="card-freq-list">
-        ${winnerCardEntries.map(([cardId, count]) => {
-          const card = getCardById(cardId);
-          if (!card) return '';
-          const pct = Math.round(count / maxCount * 100);
-          return `<div class="card-freq-item">
-            <span class="card-freq-name">${escHtml(card.name)} <span style="color:var(--text-muted);font-size:0.75rem">${card.points}p</span></span>
-            <div class="card-freq-bar-wrap"><div class="card-freq-bar card-freq-bar--winner" style="width: ${pct}%"></div></div>
-            <span class="card-freq-count">${count}</span>
-          </div>`;
-        }).join('')}
-      </div>`;
-  }
+  // Card frequencies, each measured against everyone else's
+  const winnerCardHtml = cardFrequencyHtml('Vinnarkort', player.name,
+    ps.winnerCardFrequency, 'timesWon', 'card-freq-bar--winner');
+  const cardHtml = cardFrequencyHtml('Kort som förlorare', player.name,
+    ps.cardFrequency, 'timesPlayed', '');
 
   // Head-to-head — most played opponent first
   let h2hHtml = '';
