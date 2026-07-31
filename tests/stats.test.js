@@ -1,5 +1,6 @@
 import assert from 'assert';
-import { computeAdvancedStats } from '../js/stats.js';
+import { computeAdvancedStats, getCardsInDisplayOrder } from '../js/stats.js';
+import { CARDS } from '../js/cards.js';
 
 /** Build a completed 2-player game where `winnerId` wins a single round. */
 function makeGame(id, dateIso, winnerId, loserId) {
@@ -52,6 +53,23 @@ function runTests() {
   } catch (err) {
     failures++;
     console.error('❌ longestWinStreak record failed', err);
+  }
+
+  // Test: the card statistics list covers the whole deck and is always ordered
+  // Harlekin first, Blaren last — no card may drop out (Blaren used to be cut).
+  try {
+    const players = [{ id: 'p1', name: 'A' }, { id: 'p2', name: 'B' }];
+    const stats = computeAdvancedStats([makeGame('g1', '2024-01-01T10:00:00.000Z', 'p1', 'p2')], players);
+    const list = getCardsInDisplayOrder(stats.cards);
+
+    assert.strictEqual(list.length, CARDS.length);
+    assert.strictEqual(list[0].id, 'harlekin');
+    assert.strictEqual(list[list.length - 1].id, 'blaren');
+    assert.ok(list.some(c => c.id === 'blaren'));
+    console.log('✅ card display order passes');
+  } catch (err) {
+    failures++;
+    console.error('❌ card display order failed', err);
   }
 
   if (failures > 0) {

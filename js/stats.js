@@ -2,7 +2,7 @@
  * Kille Advanced Analytics Engine
  * Comprehensive statistics computed from game history.
  */
-import { getCardById, CARDS } from './cards.js';
+import { getCardById, sortCardsByRank, CARDS } from './cards.js';
 import { calculateScoreTable } from './game.js';
 
 /**
@@ -49,6 +49,7 @@ export function computeAdvancedStats(games, players) {
   const cardStats = {};
   CARDS.forEach(c => {
     cardStats[c.id] = {
+      id: c.id,
       name: c.name,
       points: c.points,
       type: c.type,
@@ -318,13 +319,11 @@ export function getMostCommonCard(playerStat) {
 }
 
 /**
- * Get top N cards by play frequency.
+ * Get every card in canonical display order (Harlekin first, Blaren last).
+ * The whole deck is always returned so no card can drop out of the statistics.
  */
-export function getTopCards(cardStats, n = 5) {
-  return Object.values(cardStats)
-    .filter(c => c.timesPlayed > 0)
-    .sort((a, b) => b.points - a.points || b.timesPlayed - a.timesPlayed)
-    .slice(0, n);
+export function getCardsInDisplayOrder(cardStats) {
+  return sortCardsByRank(Object.values(cardStats));
 }
 
 /**

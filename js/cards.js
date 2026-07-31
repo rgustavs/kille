@@ -32,6 +32,30 @@ export const CARDS = [
   { id: 'blaren', name: 'Blaren', type: 'zero', points: 0, image: 'assets/cards/blaren.png' },
 ];
 
+/**
+ * Canonical display order for card listings and statistics:
+ * Harlekin at the top, Blaren at the bottom.
+ * Must contain every id in CARDS — unknown ids sort last.
+ */
+export const CARD_DISPLAY_ORDER = [
+  'harlekin', 'kuku', 'husar', 'husu', 'kavall', 'vardshus',
+  ...Array.from({ length: 12 }, (_, i) => `num_${12 - i}`),
+  'kransen', 'blompotten', 'blaren',
+];
+
+const DISPLAY_RANK = new Map(CARD_DISPLAY_ORDER.map((id, i) => [id, i]));
+
+/** Position of a card in the canonical display order (unknown cards last). */
+export function cardRank(id) {
+  const rank = DISPLAY_RANK.get(id);
+  return rank === undefined ? CARD_DISPLAY_ORDER.length : rank;
+}
+
+/** Copy of `cards` sorted in canonical display order (objects need an `id`). */
+export function sortCardsByRank(cards) {
+  return [...cards].sort((a, b) => cardRank(a.id) - cardRank(b.id));
+}
+
 /** Get a card definition by its ID */
 export function getCardById(id) {
   return CARDS.find(c => c.id === id) || null;
