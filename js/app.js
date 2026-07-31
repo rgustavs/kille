@@ -8,7 +8,10 @@ import {
   createGame, addRound, removeLastRound, completeGame, calculateScoreTable,
   NEKEN_PENALTY, LOW_STAKE_THRESHOLD
 } from './game.js';
-import { computeAdvancedStats, getMostCommonCard, getMostCommonWinnerCard, getCardsInDisplayOrder, getLeaderboard } from './stats.js';
+import {
+  computeAdvancedStats, getMostCommonCard, getMostCommonWinnerCard,
+  getCardsInDisplayOrder, getLeaderboard, buildHistogram
+} from './stats.js';
 import { GroupData } from './store.js';
 import { downloadExport, importFile } from './importexport.js';
 import { $, $$, escHtml, avatarInitial, formatScore, showToast, addSwipeToDismiss } from './dom.js';
@@ -1763,8 +1766,49 @@ function renderStatsTab(tab) {
     case 'leaderboard': renderLeaderboard(); break;
     case 'players': renderPlayerStats(); break;
     case 'cards': renderCardStats(); break;
+    case 'scores': renderScoreDistribution(); break;
     case 'records': renderRecords(); break;
   }
+}
+
+/**
+ * Render a score distribution as a histogram of horizontal bars,
+ * the highest scores at the top and the heaviest losses at the bottom.
+ */
+function histogramHtml(title, values, unit) {
+  const hist = buildHistogram(values);
+  if (!hist) return '';
+
+  const rows = [...hist.buckets].reverse().map(b => {
+    const pct = Math.round(b.count / hist.maxCount * 100);
+    const cls = b.from >= 0 ? 'histogram__bar--positive' : 'histogram__bar--negative';
+    return `<div class="histogram__row">
+      <span class="histogram__label">${formatScore(b.from)}…${formatScore(b.to - 1)}</span>
+      <div class="histogram__bar-wrap"><div class="histogram__bar ${cls}" style="width: ${pct}%"></div></div>
+      <span class="histogram__count">${b.count}</span>
+    </div>`;
+  }).join('');
+
+  return `
+    <h3 class="stats-section-title">${escHtml(title)}</h3>
+    <div class="histogram">
+      <div class="histogram__meta">
+        ${hist.total} ${escHtml(unit)} &middot; snitt ${formatScore(hist.average)} &middot;
+        lägst ${formatScore(hist.min)} &middot; högst ${formatScore(hist.max)}
+      </div>
+      ${rows}
+    </div>`;
+}
+
+function renderScoreDistribution() {
+  const container = $('#scores-content');
+  const { roundScores, gameScores } = cachedStats.scores;
+
+  const html = histogramHtml('Omgångspoäng — alla spelare', roundScores, 'omgångar')
+    + histogramHtml('Spelpoäng — alla spelare', gameScores, 'spelresultat');
+
+  container.innerHTML = html
+    || '<div class="empty-state"><div class="empty-state__text">Ingen poängdata ännu.</div></div>';
 }
 
 function renderLeaderboard() {
@@ -1848,6 +1892,10 @@ function renderPlayerDetail(playerId) {
         </div>
       </div>`;
   }
+
+  // Score distributions for this player
+  const roundHistHtml = histogramHtml('Fördelning — omgångspoäng', ps.roundScores, 'omgångar');
+  const gameHistHtml = histogramHtml('Fördelning — spelpoäng', ps.scoreHistory.map(h => h.score), 'spelresultat');
 
   // Card frequency (loser) — Harlekin first, Blaren last
   let cardHtml = '';
@@ -1980,6 +2028,8 @@ function renderPlayerDetail(playerId) {
     </div>
 
     ${chartHtml}
+    ${roundHistHtml}
+    ${gameHistHtml}
     ${winnerCardHtml}
     ${cardHtml}
     ${h2hHtml}

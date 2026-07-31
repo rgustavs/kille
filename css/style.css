@@ -2038,6 +2038,73 @@ body {
   text-align: right;
 }
 
+/* ─── Score histogram ────────────────────────────────────────────────────── */
+.histogram {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--cream-50);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md) var(--space-md);
+  box-shadow: var(--shadow-card);
+  margin-bottom: var(--space-lg);
+}
+
+.histogram__meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  padding: var(--space-xs) 0 var(--space-sm);
+  border-bottom: 1px solid var(--cream-200);
+  margin-bottom: var(--space-xs);
+}
+
+.histogram__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 2px 0;
+}
+
+.histogram__label {
+  flex: 0 0 auto;
+  min-width: 84px;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.histogram__bar-wrap {
+  flex: 1;
+  height: 10px;
+  background: var(--cream-200);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.histogram__bar {
+  height: 100%;
+  border-radius: 5px;
+  transition: width var(--transition-base);
+}
+
+.histogram__bar--positive {
+  background: linear-gradient(90deg, var(--green-400), var(--green-600));
+}
+
+.histogram__bar--negative {
+  background: linear-gradient(90deg, var(--red-400), var(--red-600));
+}
+
+.histogram__count {
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  min-width: 28px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ─── Card-player heatmap ────────────────────────────────────────────────── */
 .heatmap-wrap {
   overflow-x: auto;
