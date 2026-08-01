@@ -2661,6 +2661,16 @@ body {
 }
 
 /* ─── Rules Screen ────────────────────────────────────────────────────────── */
+.rules-poster {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  height: auto;
+  margin: 0 auto var(--space-lg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
 .rules-intro {
   color: var(--text-secondary);
   font-size: 0.95rem;
