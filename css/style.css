@@ -2044,11 +2044,81 @@ body {
   height: 50%;
 }
 
+/* Merged win/loss bar: the stack is the card's total appearances, split into a
+   winning and a losing segment. */
+.card-freq-stack {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  display: flex;
+  border-radius: 5px;
+  overflow: hidden;
+  transition: width var(--transition-base);
+}
+
+.card-freq-seg {
+  height: 100%;
+}
+
+.card-freq-seg--winner {
+  background: linear-gradient(90deg, #d4a017, #b8860b);
+  flex: 0 0 auto;
+  transition: width var(--transition-base);
+}
+
+.card-freq-seg--loser {
+  background: linear-gradient(90deg, var(--green-400), var(--green-600));
+  flex: 1 1 auto;
+}
+
+.card-freq-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  margin-bottom: var(--space-sm);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.card-freq-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.card-freq-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 8px;
+  border-radius: 4px;
+}
+
+.card-freq-swatch--winner {
+  background: linear-gradient(90deg, #d4a017, #b8860b);
+}
+
+.card-freq-swatch--loser {
+  background: linear-gradient(90deg, var(--green-400), var(--green-600));
+}
+
 .card-freq-count {
   font-weight: 600;
   font-size: 0.85rem;
   color: var(--text-muted);
   min-width: 32px;
+  text-align: right;
+}
+
+.card-freq-wins { color: #b8860b; }
+.card-freq-losses { color: var(--green-600); }
+
+/* Win share of the card's total appearances. */
+.card-freq-pct {
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  min-width: 40px;
   text-align: right;
 }
 
@@ -2355,6 +2425,14 @@ body {
 
 .h2h-wins { color: var(--green-600); }
 .h2h-losses { color: var(--red-600); }
+
+.h2h-pct {
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  min-width: 40px;
+  text-align: right;
+}
 
 /* ─── Score history chart ────────────────────────────────────────────────── */
 .score-chart {
