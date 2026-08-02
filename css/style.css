@@ -2499,43 +2499,16 @@ body {
 }
 
 /* ─── Head-to-head ───────────────────────────────────────────────────────── */
-.h2h-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  margin-bottom: var(--space-lg);
-}
-
-.h2h-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  background: var(--cream-50);
-  border-radius: var(--radius-sm);
-  padding: var(--space-sm) var(--space-md);
-}
-
-.h2h-name {
-  flex: 1;
-  font-weight: 500;
-  font-size: 0.9rem;
-}
-
-.h2h-record {
+/* Tabellen delar utseende med topplistan (.lb-*); bara vinst- och förlustsiffran
+   färgas för att skilja dem åt. */
+.lb-table td.h2h-wins {
+  color: var(--green-600);
   font-weight: 600;
-  font-size: 0.85rem;
-  color: var(--text-secondary);
 }
 
-.h2h-wins { color: var(--green-600); }
-.h2h-losses { color: var(--red-600); }
-
-.h2h-pct {
-  font-weight: 700;
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  min-width: 40px;
-  text-align: right;
+.lb-table td.h2h-losses {
+  color: var(--red-600);
+  font-weight: 600;
 }
 
 /* ─── Score history chart ────────────────────────────────────────────────── */

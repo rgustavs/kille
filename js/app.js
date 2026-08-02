@@ -51,6 +51,8 @@ let cachedStats = null;
 let heatmapMode = 'loser'; // 'loser' | 'winner'
 // Topplistans sortering. key === null betyder grundsorteringen (poäng, sedan spel).
 let leaderboardSort = { key: null, dir: 'desc' };
+// Sorteringen i "Mot andra spelare". null = flest omgångar tillsammans först.
+let h2hSort = { key: null, dir: 'desc' };
 
 // ═══════════════════════════════════════════════════════════════════════════
 // NAVIGATION
@@ -1924,38 +1926,37 @@ const LEADERBOARD_COLUMNS = [
     cell: p => `${p.totalScore > 0 ? '+' : ''}${p.totalScore}` },
 ];
 
-function renderLeaderboard() {
-  const leaderboard = getLeaderboard(cachedStats.players);
-  const container = $('#leaderboard-content');
+/**
+ * Sortera rader efter vald kolumn. `sort.key === null` betyder grundsorteringen,
+ * som raderna redan kommer i. Lika värden faller alltid tillbaka på `rank`, så
+ * ordningen aldrig blir godtycklig.
+ */
+function sortTableRows(columns, rows, sort) {
+  const col = columns.find(c => c.key === sort.key);
+  if (!col) return rows;
+  const dir = sort.dir === 'asc' ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    const va = col.value(a);
+    const vb = col.value(b);
+    if (va < vb) return -1 * dir;
+    if (va > vb) return 1 * dir;
+    return a.rank - b.rank;
+  });
+}
 
-  if (leaderboard.length === 0) {
-    container.innerHTML = '<div class="empty-state"><div class="empty-state__text">Ingen data ännu.</div></div>';
-    return;
-  }
-
-  // getLeaderboard ger grundsorteringen (poäng, sedan antal spel) och sätter
-  // placeringen. En vald kolumn sorterar om raderna, men placeringen i #-kolumnen
-  // står kvar så att den alltid går att läsa av.
-  const rows = [...leaderboard];
-  const sortCol = LEADERBOARD_COLUMNS.find(c => c.key === leaderboardSort.key);
-  if (sortCol) {
-    const dir = leaderboardSort.dir === 'asc' ? 1 : -1;
-    rows.sort((a, b) => {
-      const va = sortCol.value(a);
-      const vb = sortCol.value(b);
-      if (va < vb) return -1 * dir;
-      if (va > vb) return 1 * dir;
-      return a.rank - b.rank; // lika värden behåller grundordningen
-    });
-  }
-
-  // Grundsorteringen visas som en aktiv #-kolumn, så det syns att listan är
+/**
+ * Rita en sorterbar tabell. Rubriker och celler byggs ur samma kolumnlista, så
+ * ordningen kan aldrig glida isär. `rowAttrs` ger radens attribut (raden är
+ * klickbar i båda tabellerna).
+ */
+function sortableTableHtml(columns, rows, sort, rowAttrs) {
+  // Grundsorteringen visas som en aktiv förstakolumn, så det syns att listan är
   // ordnad efter placering även innan någon rubrik klickats.
-  const activeKey = leaderboardSort.key || 'rank';
-  const activeDir = leaderboardSort.key ? leaderboardSort.dir : 'asc';
+  const activeKey = sort.key || columns[0].key;
+  const activeDir = sort.key ? sort.dir : columns[0].defaultDir;
   const cellClass = c => `lb-col--${c.align}${c.group ? ' lb-col--group' : ''}${c.wide ? ' lb-col--wide' : ''}`;
 
-  const headHtml = LEADERBOARD_COLUMNS.map(c => {
+  const headHtml = columns.map(c => {
     const active = c.key === activeKey;
     const arrow = active ? (activeDir === 'asc' ? '▲' : '▼') : '';
     return `<th class="${cellClass(c)}${active ? ' lb-th--active' : ''}"
@@ -1966,24 +1967,48 @@ function renderLeaderboard() {
     </th>`;
   }).join('');
 
-  // Raderna byggs ur samma kolumnlista som rubrikerna, så ordningen kan aldrig
-  // glida isär. Hela raden är klickbar och leder till spelarens statistik.
-  const bodyHtml = rows.map(p => `
-    <tr class="lb-row${p.rank === 1 ? ' lb-row--leader' : ''}" data-player-goto="${escHtml(p.id)}"
-        tabindex="0" role="button" title="Visa statistik för ${escHtml(p.name)}">
-      ${LEADERBOARD_COLUMNS.map(c => {
-        const cls = typeof c.cls === 'function' ? c.cls(p) : c.cls;
-        return `<td class="${cellClass(c)} ${cls}">${c.cell(p)}</td>`;
+  const bodyHtml = rows.map(r => `
+    <tr ${rowAttrs(r)}>
+      ${columns.map(c => {
+        const cls = typeof c.cls === 'function' ? c.cls(r) : c.cls;
+        return `<td class="${cellClass(c)} ${cls}">${c.cell(r)}</td>`;
       }).join('')}
     </tr>`).join('');
 
+  return `<div class="lb-table-wrap">
+    <table class="lb-table">
+      <thead><tr>${headHtml}</tr></thead>
+      <tbody>${bodyHtml}</tbody>
+    </table>
+  </div>`;
+}
+
+/** Nytt sorteringsläge när en rubrik klickas. Förstakolumnen återställer. */
+function nextSortState(columns, sort, key) {
+  const col = columns.find(c => c.key === key);
+  if (!col) return sort;
+  if (key === columns[0].key) return { key: null, dir: 'desc' };
+  if (sort.key === key) return { key, dir: sort.dir === 'asc' ? 'desc' : 'asc' };
+  return { key, dir: col.defaultDir };
+}
+
+function renderLeaderboard() {
+  const leaderboard = getLeaderboard(cachedStats.players);
+  const container = $('#leaderboard-content');
+
+  if (leaderboard.length === 0) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-state__text">Ingen data ännu.</div></div>';
+    return;
+  }
+
+  // getLeaderboard ger grundsorteringen (poäng, sedan antal spel) och sätter
+  // placeringen, som står kvar i #-kolumnen även när tabellen sorterats om.
+  const rows = sortTableRows(LEADERBOARD_COLUMNS, leaderboard, leaderboardSort);
+
   container.innerHTML = `
-    <div class="lb-table-wrap">
-      <table class="lb-table">
-        <thead><tr>${headHtml}</tr></thead>
-        <tbody>${bodyHtml}</tbody>
-      </table>
-    </div>
+    ${sortableTableHtml(LEADERBOARD_COLUMNS, rows, leaderboardSort, p =>
+      `class="lb-row${p.rank === 1 ? ' lb-row--leader' : ''}" data-player-goto="${escHtml(p.id)}"
+       tabindex="0" role="button" title="Visa statistik för ${escHtml(p.name)}"`)}
     <p class="stats-section-note">
       <strong>Spel</strong> = antal spelade spel.<span class="lb-col--wide">
       <strong>Vunna spel</strong> = spel spelaren vann.</span>
@@ -1994,6 +2019,60 @@ function renderLeaderboard() {
       <strong>Poäng</strong> = totalpoäng, summan av alla spel.
       Klicka på en rad för spelarens statistik, eller på en rubrik för att sortera;
       <strong>#</strong> återställer grundsorteringen (poäng).
+    </p>`;
+}
+
+// ─── Mot andra spelare ────────────────────────────────────────────────────────
+// Samma principer som topplistan: sorterbara kolumner, avdelare mellan grupper,
+// klickbara rader och förklaringen efter tabellen.
+const H2H_COLUMNS = [
+  { key: 'rank', label: '#', title: 'Ordning — klicka för grundsorteringen', align: 'center', defaultDir: 'asc',
+    value: o => o.rank, cls: 'lb-rank', cell: o => o.rank },
+  { key: 'name', label: 'Motståndare', title: 'Motståndare', align: 'left', defaultDir: 'asc',
+    value: o => o.name.toLowerCase(), cls: 'lb-name', cell: o => escHtml(o.name) },
+  { key: 'rounds', label: 'Omgångar', title: 'Omgångar de spelat tillsammans', align: 'right', defaultDir: 'desc', group: true,
+    value: o => o.rounds, cls: 'lb-count', cell: o => o.rounds },
+  { key: 'wins', label: 'Vunna', title: 'Omgångar vunna mot motståndaren', align: 'right', defaultDir: 'desc', group: true,
+    value: o => o.wins, cls: 'lb-count h2h-wins', cell: o => o.wins },
+  { key: 'losses', label: 'Förlorade', title: 'Omgångar förlorade mot motståndaren', align: 'right', defaultDir: 'desc',
+    value: o => o.losses, cls: 'lb-count h2h-losses', cell: o => o.losses },
+  { key: 'winRate', label: 'Vinst%', title: 'Vunna av avgjorda möten', align: 'right', defaultDir: 'desc', group: true,
+    value: o => o.winRate, cls: 'lb-rate', cell: o => (o.wins + o.losses > 0 ? `${o.winRate}%` : '—') },
+];
+
+function headToHeadHtml(player, ps) {
+  // Grundsortering: flest spelade omgångar tillsammans först, sedan flest vinster.
+  const opponents = Object.entries(ps.opponents)
+    .map(([id, rec]) => {
+      const opp = PlayerStore.get(id);
+      if (!opp) return null;
+      const decided = rec.wins + rec.losses;
+      return {
+        id, name: opp.name, rounds: rec.rounds, wins: rec.wins, losses: rec.losses,
+        winRate: decided > 0 ? Math.round(rec.wins / decided * 100) : 0,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.rounds - a.rounds || b.wins - a.wins)
+    .map((o, i) => ({ ...o, rank: i + 1 }));
+
+  if (opponents.length === 0) return '';
+
+  const rows = sortTableRows(H2H_COLUMNS, opponents, h2hSort);
+  const name = escHtml(player.name);
+
+  return `
+    <h3 class="stats-section-title">Mot andra spelare</h3>
+    ${sortableTableHtml(H2H_COLUMNS, rows, h2hSort, o =>
+      `class="lb-row" data-player-goto="${escHtml(o.id)}" tabindex="0" role="button"
+       title="Visa statistik för ${escHtml(o.name)}"`)}
+    <p class="stats-section-note">
+      <strong>Omgångar</strong> = omgångar där både ${name} och motståndaren var med, oavsett vem som vann.
+      <strong>Vunna</strong> = omgångar där ${name} vann och motståndaren förlorade.
+      <strong>Förlorade</strong> = omgångar där motståndaren vann och ${name} förlorade.
+      <strong>Vinst%</strong> = vunna av vunna + förlorade; övriga omgångar avgjordes av någon tredje.
+      Klicka på en rad för motståndarens statistik, eller på en rubrik för att sortera;
+      <strong>#</strong> återställer grundsorteringen (flest omgångar tillsammans).
     </p>`;
 }
 
@@ -2072,32 +2151,7 @@ function renderPlayerDetail(playerId) {
   const cardHtml = cardFrequencyHtml('Kort som förlorare', player.name,
     ps.cardFrequency, 'timesPlayed', '');
 
-  // Head-to-head — most played opponent first
-  let h2hHtml = '';
-  const opponents = Object.entries(ps.opponents)
-    .sort((a, b) => (b[1].wins + b[1].losses) - (a[1].wins + a[1].losses) || b[1].wins - a[1].wins);
-  if (opponents.length > 0) {
-    h2hHtml = `
-      <h3 class="stats-section-title">Mot andra spelare</h3>
-      <p class="stats-section-note">
-        <strong>V</strong> = omgångar där ${escHtml(player.name)} vann och motståndaren förlorade.
-        <strong>F</strong> = omgångar där motståndaren vann och ${escHtml(player.name)} förlorade.
-        Procenten är V av V+F, alltså vinstandelen i de omgångar de spelat tillsammans.
-      </p>
-      <div class="h2h-list">
-        ${opponents.map(([oppId, rec]) => {
-          const opp = PlayerStore.get(oppId);
-          if (!opp) return '';
-          const total = rec.wins + rec.losses;
-          const winPct = total > 0 ? Math.round(rec.wins / total * 100) : 0;
-          return `<div class="h2h-item">
-            <span class="h2h-name">${escHtml(opp.name)}</span>
-            <span class="h2h-record"><span class="h2h-wins">${rec.wins}V</span> / <span class="h2h-losses">${rec.losses}F</span></span>
-            <span class="h2h-pct" title="Vinstprocent mot ${escHtml(opp.name)}">${total > 0 ? winPct + '%' : '—'}</span>
-          </div>`;
-        }).join('')}
-      </div>`;
-  }
+  const h2hHtml = headToHeadHtml(player, ps);
 
   // Streak
   let streakText = '—';
@@ -2545,17 +2599,24 @@ function bindEvents() {
 
     const sortBtn = e.target.closest('[data-sort]');
     if (sortBtn) {
-      const key = sortBtn.dataset.sort;
-      const col = LEADERBOARD_COLUMNS.find(c => c.key === key);
-      if (!col) return;
-      if (key === 'rank') {
-        leaderboardSort = { key: null, dir: 'desc' }; // tillbaka till grundsorteringen
-      } else if (leaderboardSort.key === key) {
-        leaderboardSort = { key, dir: leaderboardSort.dir === 'asc' ? 'desc' : 'asc' };
-      } else {
-        leaderboardSort = { key, dir: col.defaultDir };
-      }
+      leaderboardSort = nextSortState(LEADERBOARD_COLUMNS, leaderboardSort, sortBtn.dataset.sort);
       renderLeaderboard();
+    }
+  });
+
+  // "Mot andra spelare" — samma tabellbeteende inne på spelarfliken.
+  $('#player-detail-content').addEventListener('click', (e) => {
+    const row = e.target.closest('.lb-row[data-player-goto]');
+    if (row) {
+      selectedStatsPlayerId = row.dataset.playerGoto;
+      renderPlayerStats();
+      return;
+    }
+
+    const sortBtn = e.target.closest('[data-sort]');
+    if (sortBtn) {
+      h2hSort = nextSortState(H2H_COLUMNS, h2hSort, sortBtn.dataset.sort);
+      renderPlayerDetail(selectedStatsPlayerId);
     }
   });
 
@@ -2568,6 +2629,15 @@ function bindEvents() {
     e.preventDefault();
     selectedStatsPlayerId = row.dataset.playerGoto;
     switchStatsTab('players');
+  });
+
+  $('#player-detail-content').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const row = e.target.closest('.lb-row[data-player-goto]');
+    if (!row) return;
+    e.preventDefault();
+    selectedStatsPlayerId = row.dataset.playerGoto;
+    renderPlayerStats();
   });
 
   $('#cards-content').addEventListener('click', (e) => {
