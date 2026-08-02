@@ -1902,14 +1902,26 @@ function renderScoreDistribution() {
 // omgångar och poäng aldrig läses som varandras siffror. `wide` markerar
 // kolumner som bara ryms från surfplatta och uppåt (döljs i CSS på mobil).
 const LEADERBOARD_COLUMNS = [
-  { key: 'rank', label: '#', title: 'Placering — klicka för grundsorteringen', align: 'center', defaultDir: 'asc', value: p => p.rank },
-  { key: 'name', label: 'Spelare', title: 'Namn', align: 'left', defaultDir: 'asc', value: p => p.name.toLowerCase() },
-  { key: 'gamesPlayed', label: 'Spel', title: 'Spelade spel', align: 'right', defaultDir: 'desc', group: true, value: p => p.gamesPlayed },
-  { key: 'gamesWon', label: 'Vunna spel', title: 'Vunna spel', align: 'right', defaultDir: 'desc', wide: true, value: p => p.gamesWon },
-  { key: 'roundsPlayed', label: 'Omgångar', title: 'Spelade omgångar', align: 'right', defaultDir: 'desc', group: true, value: p => p.roundsPlayed },
-  { key: 'roundsWon', label: 'Vunna omg.', title: 'Vunna omgångar', align: 'right', defaultDir: 'desc', wide: true, value: p => p.roundsWon },
-  { key: 'gameWinRate', label: 'Vinst%', title: 'Andel vunna spel', align: 'right', defaultDir: 'desc', group: true, value: p => p.gameWinRate },
-  { key: 'totalScore', label: 'Poäng', title: 'Totalpoäng', align: 'right', defaultDir: 'desc', group: true, value: p => p.totalScore },
+  { key: 'rank', label: '#', title: 'Placering — klicka för grundsorteringen', align: 'center', defaultDir: 'asc',
+    value: p => p.rank, cls: 'lb-rank', cell: p => p.rank },
+  { key: 'name', label: 'Spelare', title: 'Namn', align: 'left', defaultDir: 'asc',
+    value: p => p.name.toLowerCase(), cls: 'lb-name', cell: p => escHtml(p.name) },
+  { key: 'gamesPlayed', label: 'Spel', title: 'Spelade spel', align: 'right', defaultDir: 'desc', group: true,
+    value: p => p.gamesPlayed, cls: 'lb-count', cell: p => p.gamesPlayed },
+  { key: 'gamesWon', label: 'Vunna spel', title: 'Vunna spel', align: 'right', defaultDir: 'desc', wide: true,
+    value: p => p.gamesWon, cls: 'lb-count lb-count--won', cell: p => p.gamesWon },
+  { key: 'gameWinRate', label: 'Vinst% spel', title: 'Andel vunna spel', align: 'right', defaultDir: 'desc',
+    value: p => p.gameWinRate, cls: 'lb-rate', cell: p => `${p.gameWinRate}%` },
+  { key: 'roundsPlayed', label: 'Omgångar', title: 'Spelade omgångar', align: 'right', defaultDir: 'desc', group: true,
+    value: p => p.roundsPlayed, cls: 'lb-count', cell: p => p.roundsPlayed },
+  { key: 'roundsWon', label: 'Vunna omg.', title: 'Vunna omgångar', align: 'right', defaultDir: 'desc', wide: true,
+    value: p => p.roundsWon, cls: 'lb-count lb-count--won', cell: p => p.roundsWon },
+  { key: 'winRate', label: 'Vinst% omg.', title: 'Andel vunna omgångar', align: 'right', defaultDir: 'desc',
+    value: p => p.winRate, cls: 'lb-rate', cell: p => `${p.winRate}%` },
+  { key: 'totalScore', label: 'Poäng', title: 'Totalpoäng', align: 'right', defaultDir: 'desc', group: true,
+    value: p => p.totalScore,
+    cls: p => `lb-score ${p.totalScore > 0 ? 'positive' : p.totalScore < 0 ? 'negative' : 'zero'}`,
+    cell: p => `${p.totalScore > 0 ? '+' : ''}${p.totalScore}` },
 ];
 
 function renderLeaderboard() {
@@ -1949,27 +1961,21 @@ function renderLeaderboard() {
     return `<th class="${cellClass(c)}${active ? ' lb-th--active' : ''}"
                 aria-sort="${active ? (activeDir === 'asc' ? 'ascending' : 'descending') : 'none'}">
       <button class="lb-sort-btn" data-sort="${c.key}" title="${escHtml(c.title)}">
-        ${escHtml(c.label)}<span class="lb-sort-arrow">${arrow}</span>
+        <span class="lb-label">${escHtml(c.label)}</span><span class="lb-sort-arrow">${arrow}</span>
       </button>
     </th>`;
   }).join('');
 
-  const byKey = Object.fromEntries(LEADERBOARD_COLUMNS.map(c => [c.key, c]));
-  const bodyHtml = rows.map(p => {
-    const scoreClass = p.totalScore > 0 ? 'positive' : p.totalScore < 0 ? 'negative' : 'zero';
-    // Hela raden är klickbar och leder till spelarens statistik.
-    return `<tr class="lb-row${p.rank === 1 ? ' lb-row--leader' : ''}" data-player-goto="${escHtml(p.id)}"
-                tabindex="0" role="button" title="Visa statistik för ${escHtml(p.name)}">
-      <td class="lb-col--center lb-rank">${p.rank}</td>
-      <td class="lb-col--left lb-name">${escHtml(p.name)}</td>
-      <td class="${cellClass(byKey.gamesPlayed)} lb-count">${p.gamesPlayed}</td>
-      <td class="${cellClass(byKey.gamesWon)} lb-count lb-count--won">${p.gamesWon}</td>
-      <td class="${cellClass(byKey.roundsPlayed)} lb-count">${p.roundsPlayed}</td>
-      <td class="${cellClass(byKey.roundsWon)} lb-count lb-count--won">${p.roundsWon}</td>
-      <td class="${cellClass(byKey.gameWinRate)} lb-rate">${p.gameWinRate}%</td>
-      <td class="${cellClass(byKey.totalScore)} lb-score ${scoreClass}">${p.totalScore > 0 ? '+' : ''}${p.totalScore}</td>
-    </tr>`;
-  }).join('');
+  // Raderna byggs ur samma kolumnlista som rubrikerna, så ordningen kan aldrig
+  // glida isär. Hela raden är klickbar och leder till spelarens statistik.
+  const bodyHtml = rows.map(p => `
+    <tr class="lb-row${p.rank === 1 ? ' lb-row--leader' : ''}" data-player-goto="${escHtml(p.id)}"
+        tabindex="0" role="button" title="Visa statistik för ${escHtml(p.name)}">
+      ${LEADERBOARD_COLUMNS.map(c => {
+        const cls = typeof c.cls === 'function' ? c.cls(p) : c.cls;
+        return `<td class="${cellClass(c)} ${cls}">${c.cell(p)}</td>`;
+      }).join('')}
+    </tr>`).join('');
 
   container.innerHTML = `
     <div class="lb-table-wrap">
@@ -1981,9 +1987,10 @@ function renderLeaderboard() {
     <p class="stats-section-note">
       <strong>Spel</strong> = antal spelade spel.<span class="lb-col--wide">
       <strong>Vunna spel</strong> = spel spelaren vann.</span>
+      <strong>Vinst% spel</strong> = andel av spelen som spelaren vunnit.
       <strong>Omgångar</strong> = antal spelade omgångar; ett spel består av flera omgångar.<span class="lb-col--wide">
       <strong>Vunna omg.</strong> = omgångar spelaren vann.</span>
-      <strong>Vinst%</strong> = andel av spelen som spelaren vunnit.
+      <strong>Vinst% omg.</strong> = andel av omgångarna som spelaren vunnit.
       <strong>Poäng</strong> = totalpoäng, summan av alla spel.
       Klicka på en rad för spelarens statistik, eller på en rubrik för att sortera;
       <strong>#</strong> återställer grundsorteringen (poäng).

@@ -1581,20 +1581,6 @@ body {
   .stat-card__label {
     font-size: 0.7rem;
   }
-  .lb-table {
-    font-size: 0.8rem;
-  }
-  .lb-table th,
-  .lb-table td {
-    padding: var(--space-xs) 3px;
-  }
-  .lb-sort-btn {
-    padding: var(--space-xs) 0;
-    font-size: 0.72rem;
-  }
-  .lb-name {
-    font-size: 0.82rem;
-  }
   .player-detail-avatar {
     width: 42px;
     height: 42px;
@@ -1834,7 +1820,7 @@ body {
 /* The whole header cell is the sort control. */
 .lb-sort-btn {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 3px;
   width: 100%;
   background: none;
@@ -1845,8 +1831,12 @@ body {
   font-size: 0.78rem;
   color: var(--text-secondary);
   cursor: pointer;
-  white-space: nowrap;
 }
+
+/* Rubriker i två ord ("Vinst% spel") får brytas så att kolumnen inte blir
+   bredare än sina siffror. Cellernas värden radbryts aldrig. */
+.lb-table th { white-space: normal; }
+.lb-label { display: inline-block; }
 
 .lb-col--right .lb-sort-btn { justify-content: flex-end; }
 .lb-col--center .lb-sort-btn { justify-content: center; }
@@ -1921,6 +1911,39 @@ body {
    porträtt är 744 px bred, telefoner klarar inte åtta kolumner. */
 @media (max-width: 719px) {
   .lb-col--wide { display: none; }
+}
+
+/* Telefon: knappare mått så att alla kolumner ryms utan sidoscroll. Blocket
+   måste ligga efter grundreglerna ovan för att vinna på samma specificitet. */
+@media (max-width: 480px) {
+  .lb-table {
+    font-size: 0.78rem;
+  }
+  .lb-table th,
+  .lb-table td {
+    padding: var(--space-xs) 2px;
+  }
+  .lb-table th:first-child,
+  .lb-table td:first-child { padding-left: var(--space-xs); }
+  .lb-table th:last-child,
+  .lb-table td:last-child { padding-right: var(--space-xs); }
+  .lb-sort-btn {
+    padding: var(--space-xs) 0;
+    font-size: 0.68rem;
+  }
+  .lb-name {
+    font-size: 0.8rem;
+  }
+  .lb-score {
+    font-size: 0.88rem;
+  }
+}
+
+/* Riktigt smala telefoner (iPhone SE m.fl.) — sista marginalen tas ur rubrikerna. */
+@media (max-width: 400px) {
+  .lb-sort-btn {
+    font-size: 0.63rem;
+  }
 }
 
 .lb-rate {
