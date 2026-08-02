@@ -1578,16 +1578,19 @@ body {
   .stat-card__label {
     font-size: 0.7rem;
   }
-  .leaderboard-item {
-    padding: var(--space-sm) var(--space-md);
+  .lb-table {
+    font-size: 0.8rem;
   }
-  .leaderboard-rank {
-    font-size: 1.1rem;
+  .lb-table th,
+  .lb-table td {
+    padding: var(--space-xs) 3px;
   }
-  .leaderboard-avatar {
-    width: 34px;
-    height: 34px;
-    font-size: 0.95rem;
+  .lb-sort-btn {
+    padding: var(--space-xs) 0;
+    font-size: 0.72rem;
+  }
+  .leaderboard-name-btn {
+    font-size: 0.82rem;
   }
   .player-detail-avatar {
     width: 42px;
@@ -1773,72 +1776,94 @@ body {
 }
 
 /* ─── Leaderboard ────────────────────────────────────────────────────────── */
-.leaderboard {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
+/* ─── Leaderboard table ──────────────────────────────────────────────────── */
+.lb-table-wrap {
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--cream-300);
+  box-shadow: var(--shadow-card);
+  background: var(--cream-50);
 }
 
-.leaderboard-item {
+.lb-table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 100%;
+  font-size: 0.85rem;
+}
+
+.lb-table th,
+.lb-table td {
+  padding: var(--space-sm) 4px;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--cream-200);
+}
+
+.lb-table th:first-child,
+.lb-table td:first-child { padding-left: var(--space-sm); }
+
+.lb-table th:last-child,
+.lb-table td:last-child { padding-right: var(--space-sm); }
+
+.lb-table th {
+  background: var(--cream-100);
+  padding: 0;
+}
+
+.lb-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Namnkolumnen tar överbliven bredd så sifferkolumnerna hålls ihop till höger. */
+.lb-table th:nth-child(2),
+.lb-table td:nth-child(2) { width: 100%; }
+
+.lb-col--left { text-align: left; }
+.lb-col--right { text-align: right; }
+.lb-col--center { text-align: center; }
+
+/* The whole header cell is the sort control. */
+.lb-sort-btn {
   display: flex;
   align-items: center;
-  gap: var(--space-md);
-  background: var(--cream-50);
-  border-radius: var(--radius-md);
-  padding: var(--space-md);
-  box-shadow: var(--shadow-card);
-  transition: transform var(--transition-fast);
+  gap: 3px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: var(--space-sm) 0;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
 }
 
-.leaderboard-item:first-child {
-  background: linear-gradient(135deg, var(--gold-100) 0%, var(--cream-50) 100%);
-  border: 1px solid var(--gold-300);
+.lb-col--right .lb-sort-btn { justify-content: flex-end; }
+.lb-col--center .lb-sort-btn { justify-content: center; }
+
+.lb-sort-btn:hover { color: var(--green-700); }
+
+.lb-th--active .lb-sort-btn { color: var(--green-700); }
+
+.lb-sort-arrow {
+  font-size: 0.6rem;
+  line-height: 1;
+  min-width: 0.6rem;
 }
 
-.leaderboard-item:nth-child(2) {
-  border: 1px solid var(--cream-300);
-}
-
-.leaderboard-item:nth-child(3) {
-  border: 1px solid var(--cream-300);
-}
-
-.leaderboard-rank {
+.lb-rank {
   font-family: var(--font-display);
-  font-size: 1.4rem;
   font-weight: 700;
   color: var(--text-muted);
-  min-width: 2rem;
-  text-align: center;
+  width: 1.5rem;
 }
 
-.leaderboard-item:first-child .leaderboard-rank {
-  color: var(--gold-500);
-}
+.lb-row--leader .lb-rank { color: var(--gold-500); }
 
-.leaderboard-avatar {
-  width: 42px;
-  height: 42px;
-  border-radius: var(--radius-round);
-  background: var(--green-600);
-  color: var(--cream-50);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 1.1rem;
-  flex-shrink: 0;
-}
-
-.leaderboard-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.leaderboard-name {
-  font-weight: 600;
-  font-size: 0.95rem;
-  color: var(--text-primary);
+/* Flat tint, not a gradient — a gradient would restart in every cell. */
+.lb-row--leader td {
+  background: var(--gold-100);
 }
 
 .leaderboard-name-btn {
@@ -1846,36 +1871,30 @@ body {
   border: none;
   padding: 0;
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   color: var(--accent);
   cursor: pointer;
   text-align: left;
   text-decoration: underline;
   text-decoration-color: transparent;
   transition: text-decoration-color 0.15s;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .leaderboard-name-btn:hover {
   text-decoration-color: var(--accent);
 }
 
-.leaderboard-meta {
-  font-size: 0.78rem;
-  color: var(--text-muted);
-  margin-top: 2px;
-}
-
-.leaderboard-score {
+.lb-score {
   font-family: var(--font-display);
-  font-size: 1.2rem;
   font-weight: 700;
-  text-align: right;
-  min-width: 60px;
+  font-size: 0.95rem;
 }
 
-.leaderboard-score.positive { color: var(--green-600); }
-.leaderboard-score.negative { color: var(--red-600); }
-.leaderboard-score.zero { color: var(--text-muted); }
+.lb-score.positive { color: var(--green-600); }
+.lb-score.negative { color: var(--red-600); }
+.lb-score.zero { color: var(--text-muted); }
 
 /* ─── Stats Cards Grid ───────────────────────────────────────────────────── */
 .stats-grid {
