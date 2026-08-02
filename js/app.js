@@ -1999,6 +1999,11 @@ function renderPlayerDetail(playerId) {
   if (opponents.length > 0) {
     h2hHtml = `
       <h3 class="stats-section-title">Mot andra spelare</h3>
+      <p class="stats-section-note">
+        <strong>V</strong> = omgångar där ${escHtml(player.name)} vann och motståndaren förlorade.
+        <strong>F</strong> = omgångar där motståndaren vann och ${escHtml(player.name)} förlorade.
+        Procenten är V av V+F, alltså vinstandelen i de omgångar de spelat tillsammans.
+      </p>
       <div class="h2h-list">
         ${opponents.map(([oppId, rec]) => {
           const opp = PlayerStore.get(oppId);

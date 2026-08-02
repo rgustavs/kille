@@ -1988,6 +1988,19 @@ body {
   border-bottom: 1px solid var(--cream-300);
 }
 
+/* Short explanation of what a section's numbers mean. */
+.stats-section-note {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  margin-bottom: var(--space-sm);
+}
+
+.stats-section-note strong {
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+
 /* ─── Card frequency list ────────────────────────────────────────────────── */
 .card-freq-list {
   display: flex;
