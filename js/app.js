@@ -1898,14 +1898,15 @@ function renderScoreDistribution() {
 
 // Topplistans kolumner. `value` plockar ut sorteringsnyckeln, `defaultDir` är
 // riktningen första gången kolumnen väljs (namn läses bäst A–Ö, siffror störst först).
+// `group` startar en ny kolumngrupp med en avdelare till vänster, så att spel,
+// omgångar och poäng aldrig läses som varandras siffror.
 const LEADERBOARD_COLUMNS = [
   { key: 'rank', label: '#', title: 'Placering — klicka för grundsorteringen', align: 'center', defaultDir: 'asc', value: p => p.rank },
   { key: 'name', label: 'Spelare', title: 'Namn', align: 'left', defaultDir: 'asc', value: p => p.name.toLowerCase() },
-  { key: 'gamesPlayed', label: 'Spel', title: 'Spelade spel', align: 'right', defaultDir: 'desc', value: p => p.gamesPlayed },
-  { key: 'roundsPlayed', label: 'Omg', title: 'Spelade omgångar', align: 'right', defaultDir: 'desc', value: p => p.roundsPlayed },
-  { key: 'roundsWon', label: 'V', title: 'Vunna omgångar', align: 'right', defaultDir: 'desc', value: p => p.roundsWon },
-  { key: 'gameWinRate', label: 'Vinst%', title: 'Andel vunna spel', align: 'right', defaultDir: 'desc', value: p => p.gameWinRate },
-  { key: 'totalScore', label: 'Poäng', title: 'Totalpoäng', align: 'right', defaultDir: 'desc', value: p => p.totalScore },
+  { key: 'gamesPlayed', label: 'Spel', title: 'Spelade spel', align: 'right', defaultDir: 'desc', group: true, value: p => p.gamesPlayed },
+  { key: 'roundsPlayed', label: 'Omgångar', title: 'Spelade omgångar', align: 'right', defaultDir: 'desc', group: true, value: p => p.roundsPlayed },
+  { key: 'gameWinRate', label: 'Vinst%', title: 'Andel vunna spel', align: 'right', defaultDir: 'desc', group: true, value: p => p.gameWinRate },
+  { key: 'totalScore', label: 'Poäng', title: 'Totalpoäng', align: 'right', defaultDir: 'desc', group: true, value: p => p.totalScore },
 ];
 
 function renderLeaderboard() {
@@ -1937,10 +1938,12 @@ function renderLeaderboard() {
   // ordnad efter placering även innan någon rubrik klickats.
   const activeKey = leaderboardSort.key || 'rank';
   const activeDir = leaderboardSort.key ? leaderboardSort.dir : 'asc';
+  const cellClass = c => `lb-col--${c.align}${c.group ? ' lb-col--group' : ''}`;
+
   const headHtml = LEADERBOARD_COLUMNS.map(c => {
     const active = c.key === activeKey;
     const arrow = active ? (activeDir === 'asc' ? '▲' : '▼') : '';
-    return `<th class="lb-col--${c.align}${active ? ' lb-th--active' : ''}"
+    return `<th class="${cellClass(c)}${active ? ' lb-th--active' : ''}"
                 aria-sort="${active ? (activeDir === 'asc' ? 'ascending' : 'descending') : 'none'}">
       <button class="lb-sort-btn" data-sort="${c.key}" title="${escHtml(c.title)}">
         ${escHtml(c.label)}<span class="lb-sort-arrow">${arrow}</span>
@@ -1948,33 +1951,36 @@ function renderLeaderboard() {
     </th>`;
   }).join('');
 
+  const byKey = Object.fromEntries(LEADERBOARD_COLUMNS.map(c => [c.key, c]));
   const bodyHtml = rows.map(p => {
     const scoreClass = p.totalScore > 0 ? 'positive' : p.totalScore < 0 ? 'negative' : 'zero';
-    return `<tr class="lb-row${p.rank === 1 ? ' lb-row--leader' : ''}">
+    // Hela raden är klickbar och leder till spelarens statistik.
+    return `<tr class="lb-row${p.rank === 1 ? ' lb-row--leader' : ''}" data-player-goto="${escHtml(p.id)}"
+                tabindex="0" role="button" title="Visa statistik för ${escHtml(p.name)}">
       <td class="lb-col--center lb-rank">${p.rank}</td>
-      <td class="lb-col--left">
-        <button class="leaderboard-name-btn" data-player-goto="${escHtml(p.id)}">${escHtml(p.name)}</button>
-      </td>
-      <td class="lb-col--right">${p.gamesPlayed}</td>
-      <td class="lb-col--right">${p.roundsPlayed}</td>
-      <td class="lb-col--right">${p.roundsWon}</td>
-      <td class="lb-col--right">${p.gameWinRate}%</td>
-      <td class="lb-col--right lb-score ${scoreClass}">${p.totalScore > 0 ? '+' : ''}${p.totalScore}</td>
+      <td class="lb-col--left lb-name">${escHtml(p.name)}</td>
+      <td class="${cellClass(byKey.gamesPlayed)} lb-count">${p.gamesPlayed}</td>
+      <td class="${cellClass(byKey.roundsPlayed)} lb-count">${p.roundsPlayed}</td>
+      <td class="${cellClass(byKey.gameWinRate)} lb-rate">${p.gameWinRate}%</td>
+      <td class="${cellClass(byKey.totalScore)} lb-score ${scoreClass}">${p.totalScore > 0 ? '+' : ''}${p.totalScore}</td>
     </tr>`;
   }).join('');
 
   container.innerHTML = `
-    <p class="stats-section-note">
-      <strong>Spel</strong> = spelade spel, <strong>Omg</strong> = spelade omgångar,
-      <strong>V</strong> = vunna omgångar, <strong>Vinst%</strong> = andel vunna spel.
-      Klicka på en rubrik för att sortera; <strong>#</strong> återställer grundsorteringen (poäng).
-    </p>
     <div class="lb-table-wrap">
       <table class="lb-table">
         <thead><tr>${headHtml}</tr></thead>
         <tbody>${bodyHtml}</tbody>
       </table>
-    </div>`;
+    </div>
+    <p class="stats-section-note">
+      <strong>Spel</strong> = antal spelade spel.
+      <strong>Omgångar</strong> = antal spelade omgångar; ett spel består av flera omgångar.
+      <strong>Vinst%</strong> = andel av spelen som spelaren vunnit.
+      <strong>Poäng</strong> = totalpoäng, summan av alla spel.
+      Klicka på en rad för spelarens statistik, eller på en rubrik för att sortera;
+      <strong>#</strong> återställer grundsorteringen (poäng).
+    </p>`;
 }
 
 function renderPlayerStats() {
@@ -2516,9 +2522,9 @@ function bindEvents() {
   });
 
   $('#leaderboard-content').addEventListener('click', (e) => {
-    const btn = e.target.closest('.leaderboard-name-btn');
-    if (btn) {
-      selectedStatsPlayerId = btn.dataset.playerGoto;
+    const row = e.target.closest('[data-player-goto]');
+    if (row) {
+      selectedStatsPlayerId = row.dataset.playerGoto;
       switchStatsTab('players');
       return;
     }
@@ -2537,6 +2543,17 @@ function bindEvents() {
       }
       renderLeaderboard();
     }
+  });
+
+  // Raderna är tangentbordsnåbara (tabindex/role på <tr>), så Enter och
+  // mellanslag måste göra samma sak som ett klick.
+  $('#leaderboard-content').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const row = e.target.closest('.lb-row[data-player-goto]');
+    if (!row) return;
+    e.preventDefault();
+    selectedStatsPlayerId = row.dataset.playerGoto;
+    switchStatsTab('players');
   });
 
   $('#cards-content').addEventListener('click', (e) => {

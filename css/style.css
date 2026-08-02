@@ -42,6 +42,9 @@
   --text-secondary: #5c5040;
   --text-muted: #8a7e6e;
 
+  /* Interaktiv accent (länkar, aktiva filterknappar). */
+  --accent: var(--green-600);
+
   /* Spacing */
   --space-xs: 0.25rem;
   --space-sm: 0.5rem;
@@ -1589,7 +1592,7 @@ body {
     padding: var(--space-xs) 0;
     font-size: 0.72rem;
   }
-  .leaderboard-name-btn {
+  .lb-name {
     font-size: 0.82rem;
   }
   .player-detail-avatar {
@@ -1775,7 +1778,6 @@ body {
   animation: fadeIn 200ms ease forwards;
 }
 
-/* ─── Leaderboard ────────────────────────────────────────────────────────── */
 /* ─── Leaderboard table ──────────────────────────────────────────────────── */
 .lb-table-wrap {
   overflow-x: auto;
@@ -1794,9 +1796,16 @@ body {
 
 .lb-table th,
 .lb-table td {
-  padding: var(--space-sm) 4px;
+  padding: var(--space-sm) 5px;
   white-space: nowrap;
   border-bottom: 1px solid var(--cream-200);
+}
+
+/* Avdelare mellan kolumngrupperna: spel | omgångar | vinst | poäng står isär
+   så att siffrorna inte kan förväxlas med varandra. */
+.lb-table th.lb-col--group,
+.lb-table td.lb-col--group {
+  border-left: 1px solid var(--cream-300);
 }
 
 .lb-table th:first-child,
@@ -1866,30 +1875,54 @@ body {
   background: var(--gold-100);
 }
 
-.leaderboard-name-btn {
-  background: none;
-  border: none;
-  padding: 0;
+/* Hela raden leder till spelarstatistiken. */
+.lb-row {
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.lb-row:hover td,
+.lb-row:focus-visible td {
+  background: var(--cream-100);
+}
+
+.lb-row--leader:hover td,
+.lb-row--leader:focus-visible td {
+  background: var(--gold-200);
+}
+
+.lb-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.lb-name {
   font-weight: 600;
   font-size: 0.9rem;
   color: var(--accent);
-  cursor: pointer;
-  text-align: left;
-  text-decoration: underline;
-  text-decoration-color: transparent;
-  transition: text-decoration-color 0.15s;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 0;
 }
 
-.leaderboard-name-btn:hover {
-  text-decoration-color: var(--accent);
+/* Räknare (spel, omgångar, vunna) — vanliga siffror i dämpad ton. */
+.lb-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
 }
 
+.lb-rate {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* Poängen sticker ut: rubrikfont, större och färgad. */
 .lb-score {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .lb-score.positive { color: var(--green-600); }
@@ -2008,6 +2041,10 @@ body {
 }
 
 /* Short explanation of what a section's numbers mean. */
+.lb-table-wrap + .stats-section-note {
+  margin-top: var(--space-sm);
+}
+
 .stats-section-note {
   font-size: 0.75rem;
   line-height: 1.5;
