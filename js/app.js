@@ -2003,9 +2003,12 @@ function renderPlayerDetail(playerId) {
         ${opponents.map(([oppId, rec]) => {
           const opp = PlayerStore.get(oppId);
           if (!opp) return '';
+          const total = rec.wins + rec.losses;
+          const winPct = total > 0 ? Math.round(rec.wins / total * 100) : 0;
           return `<div class="h2h-item">
             <span class="h2h-name">${escHtml(opp.name)}</span>
             <span class="h2h-record"><span class="h2h-wins">${rec.wins}V</span> / <span class="h2h-losses">${rec.losses}F</span></span>
+            <span class="h2h-pct" title="Vinstprocent mot ${escHtml(opp.name)}">${total > 0 ? winPct + '%' : '—'}</span>
           </div>`;
         }).join('')}
       </div>`;
@@ -2099,8 +2102,6 @@ function renderCardStats() {
     return;
   }
 
-  const maxPlayed = Math.max(...allCards.map(c => c.timesPlayed), 1);
-
   const freqKey = heatmapMode === 'winner' ? 'winnerFrequency' : 'playerFrequency';
 
   const playerTotals = {};
@@ -2168,36 +2169,39 @@ function renderCardStats() {
       </table>
     </div>`;
 
-  // Winner cards section (hidden entirely when no winner cards are registered)
-  const maxWon = Math.max(...allCards.map(c => c.timesWon), 1);
+  // One list per card: how often it won, how often it lost, and the win share.
+  // The bar length is the card's total appearances, split into a winning and a
+  // losing part, so both stories are readable in the same row.
+  const maxTotal = Math.max(...allCards.map(c => c.timesWon + c.timesPlayed), 1);
 
-  const winnerCardsHtml = allCards.some(c => c.timesWon > 0) ? `
-    <h3 class="stats-section-title">Vinnande kort</h3>
+  const cardListHtml = `
+    <div class="card-freq-legend">
+      <span class="card-freq-legend-item"><i class="card-freq-swatch card-freq-swatch--winner"></i>Vinnarkort</span>
+      <span class="card-freq-legend-item"><i class="card-freq-swatch card-freq-swatch--loser"></i>Kort som förlorare</span>
+    </div>
     <div class="card-freq-list">
       ${allCards.map(c => {
-        const pct = Math.round(c.timesWon / maxWon * 100);
+        const total = c.timesWon + c.timesPlayed;
+        const totalPct = Math.round(total / maxTotal * 100);
+        const winShare = total > 0 ? c.timesWon / total * 100 : 0;
+        const winPct = Math.round(winShare);
         return `<div class="card-freq-item">
           <span class="card-freq-name">${escHtml(c.name)} <span style="color:var(--text-muted);font-size:0.75rem">${c.points}p</span></span>
-          <div class="card-freq-bar-wrap"><div class="card-freq-bar card-freq-bar--winner" style="width: ${pct}%"></div></div>
-          <span class="card-freq-count">${c.timesWon}</span>
+          <div class="card-freq-bar-wrap" title="${c.timesWon} vinster / ${c.timesPlayed} förluster">
+            <div class="card-freq-stack" style="width: ${totalPct}%">
+              <div class="card-freq-seg card-freq-seg--winner" style="width: ${winShare.toFixed(1)}%"></div>
+              <div class="card-freq-seg card-freq-seg--loser"></div>
+            </div>
+          </div>
+          <span class="card-freq-count"><span class="card-freq-wins">${c.timesWon}V</span> / <span class="card-freq-losses">${c.timesPlayed}F</span>${c.timesWithNeken > 0 ? ` <span class="neken-badge">N${c.timesWithNeken}</span>` : ''}</span>
+          <span class="card-freq-pct">${total > 0 ? winPct + '%' : '—'}</span>
         </div>`;
       }).join('')}
-    </div>` : '';
+    </div>`;
 
   container.innerHTML = `
-    <h3 class="stats-section-title">Kort som förlorare</h3>
-    <div class="card-freq-list">
-      ${allCards.map(c => {
-        const pct = Math.round(c.timesPlayed / maxPlayed * 100);
-        return `<div class="card-freq-item">
-          <span class="card-freq-name">${escHtml(c.name)} <span style="color:var(--text-muted);font-size:0.75rem">${c.points}p</span></span>
-          <div class="card-freq-bar-wrap"><div class="card-freq-bar" style="width: ${pct}%"></div></div>
-          <span class="card-freq-count">${c.timesPlayed}${c.timesWithNeken > 0 ? ` <span class="neken-badge">N${c.timesWithNeken}</span>` : ''}</span>
-        </div>`;
-      }).join('')}
-    </div>
-
-    ${winnerCardsHtml}
+    <h3 class="stats-section-title">Kort — vinster och förluster</h3>
+    ${cardListHtml}
 
     ${heatmapHtml}
   `;
