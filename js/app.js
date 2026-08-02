@@ -1899,12 +1899,15 @@ function renderScoreDistribution() {
 // Topplistans kolumner. `value` plockar ut sorteringsnyckeln, `defaultDir` är
 // riktningen första gången kolumnen väljs (namn läses bäst A–Ö, siffror störst först).
 // `group` startar en ny kolumngrupp med en avdelare till vänster, så att spel,
-// omgångar och poäng aldrig läses som varandras siffror.
+// omgångar och poäng aldrig läses som varandras siffror. `wide` markerar
+// kolumner som bara ryms från surfplatta och uppåt (döljs i CSS på mobil).
 const LEADERBOARD_COLUMNS = [
   { key: 'rank', label: '#', title: 'Placering — klicka för grundsorteringen', align: 'center', defaultDir: 'asc', value: p => p.rank },
   { key: 'name', label: 'Spelare', title: 'Namn', align: 'left', defaultDir: 'asc', value: p => p.name.toLowerCase() },
   { key: 'gamesPlayed', label: 'Spel', title: 'Spelade spel', align: 'right', defaultDir: 'desc', group: true, value: p => p.gamesPlayed },
+  { key: 'gamesWon', label: 'Vunna spel', title: 'Vunna spel', align: 'right', defaultDir: 'desc', wide: true, value: p => p.gamesWon },
   { key: 'roundsPlayed', label: 'Omgångar', title: 'Spelade omgångar', align: 'right', defaultDir: 'desc', group: true, value: p => p.roundsPlayed },
+  { key: 'roundsWon', label: 'Vunna omg.', title: 'Vunna omgångar', align: 'right', defaultDir: 'desc', wide: true, value: p => p.roundsWon },
   { key: 'gameWinRate', label: 'Vinst%', title: 'Andel vunna spel', align: 'right', defaultDir: 'desc', group: true, value: p => p.gameWinRate },
   { key: 'totalScore', label: 'Poäng', title: 'Totalpoäng', align: 'right', defaultDir: 'desc', group: true, value: p => p.totalScore },
 ];
@@ -1938,7 +1941,7 @@ function renderLeaderboard() {
   // ordnad efter placering även innan någon rubrik klickats.
   const activeKey = leaderboardSort.key || 'rank';
   const activeDir = leaderboardSort.key ? leaderboardSort.dir : 'asc';
-  const cellClass = c => `lb-col--${c.align}${c.group ? ' lb-col--group' : ''}`;
+  const cellClass = c => `lb-col--${c.align}${c.group ? ' lb-col--group' : ''}${c.wide ? ' lb-col--wide' : ''}`;
 
   const headHtml = LEADERBOARD_COLUMNS.map(c => {
     const active = c.key === activeKey;
@@ -1960,7 +1963,9 @@ function renderLeaderboard() {
       <td class="lb-col--center lb-rank">${p.rank}</td>
       <td class="lb-col--left lb-name">${escHtml(p.name)}</td>
       <td class="${cellClass(byKey.gamesPlayed)} lb-count">${p.gamesPlayed}</td>
+      <td class="${cellClass(byKey.gamesWon)} lb-count lb-count--won">${p.gamesWon}</td>
       <td class="${cellClass(byKey.roundsPlayed)} lb-count">${p.roundsPlayed}</td>
+      <td class="${cellClass(byKey.roundsWon)} lb-count lb-count--won">${p.roundsWon}</td>
       <td class="${cellClass(byKey.gameWinRate)} lb-rate">${p.gameWinRate}%</td>
       <td class="${cellClass(byKey.totalScore)} lb-score ${scoreClass}">${p.totalScore > 0 ? '+' : ''}${p.totalScore}</td>
     </tr>`;
@@ -1974,8 +1979,10 @@ function renderLeaderboard() {
       </table>
     </div>
     <p class="stats-section-note">
-      <strong>Spel</strong> = antal spelade spel.
-      <strong>Omgångar</strong> = antal spelade omgångar; ett spel består av flera omgångar.
+      <strong>Spel</strong> = antal spelade spel.<span class="lb-col--wide">
+      <strong>Vunna spel</strong> = spel spelaren vann.</span>
+      <strong>Omgångar</strong> = antal spelade omgångar; ett spel består av flera omgångar.<span class="lb-col--wide">
+      <strong>Vunna omg.</strong> = omgångar spelaren vann.</span>
       <strong>Vinst%</strong> = andel av spelen som spelaren vunnit.
       <strong>Poäng</strong> = totalpoäng, summan av alla spel.
       Klicka på en rad för spelarens statistik, eller på en rubrik för att sortera;

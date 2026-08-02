@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kille-cache-v25';
+const CACHE_NAME = 'kille-cache-v26';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

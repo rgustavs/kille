@@ -1905,10 +1905,22 @@ body {
   max-width: 0;
 }
 
-/* Räknare (spel, omgångar, vunna) — vanliga siffror i dämpad ton. */
+/* Räknare (spelade spel och omgångar) — vanliga siffror i dämpad ton. */
 .lb-count {
   font-variant-numeric: tabular-nums;
   color: var(--text-secondary);
+}
+
+/* Vunna står bredvid spelade i samma grupp och skiljs åt med grön ton. */
+.lb-count--won {
+  color: var(--green-500);
+  font-weight: 600;
+}
+
+/* Vunna spel och vunna omgångar ryms först från surfplattestorlek — iPad i
+   porträtt är 744 px bred, telefoner klarar inte åtta kolumner. */
+@media (max-width: 719px) {
+  .lb-col--wide { display: none; }
 }
 
 .lb-rate {
