@@ -1782,7 +1782,6 @@ body {
 
 .lb-table th,
 .lb-table td {
-  padding: var(--space-sm) 5px;
   white-space: nowrap;
   border-bottom: 1px solid var(--cream-200);
 }
@@ -1794,15 +1793,29 @@ body {
   border-left: 1px solid var(--cream-300);
 }
 
-.lb-table th:first-child,
-.lb-table td:first-child { padding-left: var(--space-sm); }
-
-.lb-table th:last-child,
+/* Rubriken sitter i knappen, värdet i cellen. Samma indrag på båda, annars
+   hamnar rubriktexten inte över sina siffror. Extra luft efter #-kolumnen. */
+.lb-table td { padding: var(--space-sm) 5px; }
+.lb-table td:first-child { padding-left: var(--space-sm); padding-right: var(--space-sm); }
 .lb-table td:last-child { padding-right: var(--space-sm); }
 
 .lb-table th {
   background: var(--cream-100);
   padding: 0;
+  /* Utan detta lägger sig enradiga rubriker på tvåradigas första rad. */
+  vertical-align: middle;
+}
+
+.lb-table td {
+  vertical-align: middle;
+}
+
+.lb-table th:first-child .lb-sort-btn { padding-left: var(--space-sm); padding-right: var(--space-sm); }
+.lb-table th:last-child .lb-sort-btn { padding-right: var(--space-sm); }
+
+/* Varannan rad tonad — med en bred namnkolumn är raden lång att följa. */
+.lb-table tbody tr:nth-child(even) td {
+  background: var(--cream-100);
 }
 
 .lb-table tbody tr:last-child td {
@@ -1825,7 +1838,7 @@ body {
   width: 100%;
   background: none;
   border: none;
-  padding: var(--space-sm) 0;
+  padding: var(--space-sm) 5px;
   font: inherit;
   font-weight: 600;
   font-size: 0.78rem;
@@ -1913,23 +1926,37 @@ body {
   .lb-col--wide { display: none; }
 }
 
+/* Surfplatta och uppåt: här finns gott om slack i namnkolumnen, så cellerna
+   får luft i stället för att siffrorna ska klistra sig mot avdelarna. */
+@media (min-width: 720px) {
+  .lb-table td { padding: var(--space-sm) 10px; }
+  .lb-table td:first-child { padding-left: var(--space-md); padding-right: var(--space-sm); }
+  .lb-table td:last-child { padding-right: var(--space-md); }
+  .lb-sort-btn { padding: var(--space-sm) 10px; }
+  .lb-table th:first-child .lb-sort-btn { padding-left: var(--space-md); padding-right: var(--space-sm); }
+  .lb-table th:last-child .lb-sort-btn { padding-right: var(--space-md); }
+}
+
 /* Telefon: knappare mått så att alla kolumner ryms utan sidoscroll. Blocket
    måste ligga efter grundreglerna ovan för att vinna på samma specificitet. */
 @media (max-width: 480px) {
   .lb-table {
     font-size: 0.78rem;
   }
-  .lb-table th,
   .lb-table td {
     padding: var(--space-xs) 2px;
   }
-  .lb-table th:first-child,
-  .lb-table td:first-child { padding-left: var(--space-xs); }
-  .lb-table th:last-child,
+  .lb-table td:first-child { padding-left: var(--space-xs); padding-right: var(--space-xs); }
   .lb-table td:last-child { padding-right: var(--space-xs); }
-  .lb-sort-btn {
-    padding: var(--space-xs) 0;
+  /* Rubrikerna hålls knappa här — varje pixel styr kolumnbredden — men följer
+     cellernas indrag så att de inte klistrar ihop sig med grannkolumnen. */
+  .lb-sort-btn,
+  .lb-table th:last-child .lb-sort-btn {
+    padding: var(--space-xs) 2px;
     font-size: 0.68rem;
+  }
+  .lb-table th:first-child .lb-sort-btn {
+    padding: var(--space-xs) var(--space-xs);
   }
   .lb-name {
     font-size: 0.8rem;
@@ -1949,7 +1976,7 @@ body {
 .lb-rate {
   font-variant-numeric: tabular-nums;
   font-size: 0.8rem;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 /* Poängen sticker ut: rubrikfont, större och färgad. */
@@ -2081,6 +2108,7 @@ body {
 }
 
 .stats-section-note {
+  max-width: 70ch;
   font-size: 0.75rem;
   line-height: 1.5;
   color: var(--text-muted);
