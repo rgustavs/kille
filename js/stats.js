@@ -6,6 +6,18 @@ import { getCardById, sortCardsByRank, CARDS } from './cards.js';
 import { calculateScoreTable } from './game.js';
 
 /**
+ * Head-to-head-posten för en motståndare, skapad vid första mötet.
+ * `rounds` räknar omgångar de båda deltog i, `wins`/`losses` bara de omgångar
+ * där den ene vann och den andre förlorade.
+ */
+function opponentRecord(ps, opponentId) {
+  if (!ps.opponents[opponentId]) {
+    ps.opponents[opponentId] = { rounds: 0, wins: 0, losses: 0 };
+  }
+  return ps.opponents[opponentId];
+}
+
+/**
  * Compute advanced statistics across all games for all players.
  * @param {object[]} games - All games from GameStore
  * @param {object[]} players - All players from PlayerStore
@@ -118,13 +130,24 @@ export function computeAdvancedStats(games, players) {
       const counted = round.counted !== false;
 
       // Track round participation
+      const participants = [];
       gamePlayers.forEach(pid => {
         if (round.standByIds.includes(pid)) {
           playerStats[pid].roundsStandBy++;
           return;
         }
         playerStats[pid].roundsPlayed++;
+        participants.push(pid);
       });
+
+      // Omgångar spelade tillsammans — varje par som båda satt med i omgången,
+      // oavsett vem som vann. Vilande spelare räknas inte.
+      for (let i = 0; i < participants.length; i++) {
+        for (let j = i + 1; j < participants.length; j++) {
+          opponentRecord(playerStats[participants[i]], participants[j]).rounds++;
+          opponentRecord(playerStats[participants[j]], participants[i]).rounds++;
+        }
+      }
 
       // Winner stats
       if (playerStats[round.winnerId]) {
@@ -186,15 +209,8 @@ export function computeAdvancedStats(games, players) {
           if (!playerStats[l.playerId]) return;
           const winnerId = round.winnerId;
 
-          if (!playerStats[winnerId].opponents[l.playerId]) {
-            playerStats[winnerId].opponents[l.playerId] = { wins: 0, losses: 0 };
-          }
-          playerStats[winnerId].opponents[l.playerId].wins++;
-
-          if (!playerStats[l.playerId].opponents[winnerId]) {
-            playerStats[l.playerId].opponents[winnerId] = { wins: 0, losses: 0 };
-          }
-          playerStats[l.playerId].opponents[winnerId].losses++;
+          opponentRecord(playerStats[winnerId], l.playerId).wins++;
+          opponentRecord(playerStats[l.playerId], winnerId).losses++;
         });
       }
     });
