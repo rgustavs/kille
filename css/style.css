@@ -42,6 +42,9 @@
   --text-secondary: #5c5040;
   --text-muted: #8a7e6e;
 
+  /* Interaktiv accent (länkar, aktiva filterknappar). */
+  --accent: var(--green-600);
+
   /* Spacing */
   --space-xs: 0.25rem;
   --space-sm: 0.5rem;
@@ -1578,17 +1581,6 @@ body {
   .stat-card__label {
     font-size: 0.7rem;
   }
-  .leaderboard-item {
-    padding: var(--space-sm) var(--space-md);
-  }
-  .leaderboard-rank {
-    font-size: 1.1rem;
-  }
-  .leaderboard-avatar {
-    width: 34px;
-    height: 34px;
-    font-size: 0.95rem;
-  }
   .player-detail-avatar {
     width: 42px;
     height: 42px;
@@ -1772,110 +1764,205 @@ body {
   animation: fadeIn 200ms ease forwards;
 }
 
-/* ─── Leaderboard ────────────────────────────────────────────────────────── */
-.leaderboard {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-}
-
-.leaderboard-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  background: var(--cream-50);
+/* ─── Leaderboard table ──────────────────────────────────────────────────── */
+.lb-table-wrap {
+  overflow-x: auto;
   border-radius: var(--radius-md);
-  padding: var(--space-md);
+  border: 1px solid var(--cream-300);
   box-shadow: var(--shadow-card);
-  transition: transform var(--transition-fast);
+  background: var(--cream-50);
 }
 
-.leaderboard-item:first-child {
-  background: linear-gradient(135deg, var(--gold-100) 0%, var(--cream-50) 100%);
-  border: 1px solid var(--gold-300);
+.lb-table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 100%;
+  font-size: 0.85rem;
 }
 
-.leaderboard-item:nth-child(2) {
-  border: 1px solid var(--cream-300);
+.lb-table th,
+.lb-table td {
+  padding: var(--space-sm) 5px;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--cream-200);
 }
 
-.leaderboard-item:nth-child(3) {
-  border: 1px solid var(--cream-300);
+/* Avdelare mellan kolumngrupperna: spel | omgångar | vinst | poäng står isär
+   så att siffrorna inte kan förväxlas med varandra. */
+.lb-table th.lb-col--group,
+.lb-table td.lb-col--group {
+  border-left: 1px solid var(--cream-300);
 }
 
-.leaderboard-rank {
-  font-family: var(--font-display);
-  font-size: 1.4rem;
-  font-weight: 700;
-  color: var(--text-muted);
-  min-width: 2rem;
-  text-align: center;
+.lb-table th:first-child,
+.lb-table td:first-child { padding-left: var(--space-sm); }
+
+.lb-table th:last-child,
+.lb-table td:last-child { padding-right: var(--space-sm); }
+
+.lb-table th {
+  background: var(--cream-100);
+  padding: 0;
 }
 
-.leaderboard-item:first-child .leaderboard-rank {
-  color: var(--gold-500);
+.lb-table tbody tr:last-child td {
+  border-bottom: none;
 }
 
-.leaderboard-avatar {
-  width: 42px;
-  height: 42px;
-  border-radius: var(--radius-round);
-  background: var(--green-600);
-  color: var(--cream-50);
+/* Namnkolumnen tar överbliven bredd så sifferkolumnerna hålls ihop till höger. */
+.lb-table th:nth-child(2),
+.lb-table td:nth-child(2) { width: 100%; }
+
+.lb-col--left { text-align: left; }
+.lb-col--right { text-align: right; }
+.lb-col--center { text-align: center; }
+
+/* The whole header cell is the sort control. */
+.lb-sort-btn {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 1.1rem;
-  flex-shrink: 0;
-}
-
-.leaderboard-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.leaderboard-name {
-  font-weight: 600;
-  font-size: 0.95rem;
-  color: var(--text-primary);
-}
-
-.leaderboard-name-btn {
+  align-items: baseline;
+  gap: 3px;
+  width: 100%;
   background: none;
   border: none;
-  padding: 0;
+  padding: var(--space-sm) 0;
+  font: inherit;
   font-weight: 600;
-  font-size: 0.95rem;
-  color: var(--accent);
-  cursor: pointer;
-  text-align: left;
-  text-decoration: underline;
-  text-decoration-color: transparent;
-  transition: text-decoration-color 0.15s;
-}
-
-.leaderboard-name-btn:hover {
-  text-decoration-color: var(--accent);
-}
-
-.leaderboard-meta {
   font-size: 0.78rem;
-  color: var(--text-muted);
-  margin-top: 2px;
+  color: var(--text-secondary);
+  cursor: pointer;
 }
 
-.leaderboard-score {
+/* Rubriker i två ord ("Vinst% spel") får brytas så att kolumnen inte blir
+   bredare än sina siffror. Cellernas värden radbryts aldrig. */
+.lb-table th { white-space: normal; }
+.lb-label { display: inline-block; }
+
+.lb-col--right .lb-sort-btn { justify-content: flex-end; }
+.lb-col--center .lb-sort-btn { justify-content: center; }
+
+.lb-sort-btn:hover { color: var(--green-700); }
+
+.lb-th--active .lb-sort-btn { color: var(--green-700); }
+
+.lb-sort-arrow {
+  font-size: 0.6rem;
+  line-height: 1;
+  min-width: 0.6rem;
+}
+
+.lb-rank {
   font-family: var(--font-display);
-  font-size: 1.2rem;
   font-weight: 700;
-  text-align: right;
-  min-width: 60px;
+  color: var(--text-muted);
+  width: 1.5rem;
 }
 
-.leaderboard-score.positive { color: var(--green-600); }
-.leaderboard-score.negative { color: var(--red-600); }
-.leaderboard-score.zero { color: var(--text-muted); }
+.lb-row--leader .lb-rank { color: var(--gold-500); }
+
+/* Flat tint, not a gradient — a gradient would restart in every cell. */
+.lb-row--leader td {
+  background: var(--gold-100);
+}
+
+/* Hela raden leder till spelarstatistiken. */
+.lb-row {
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.lb-row:hover td,
+.lb-row:focus-visible td {
+  background: var(--cream-100);
+}
+
+.lb-row--leader:hover td,
+.lb-row--leader:focus-visible td {
+  background: var(--gold-200);
+}
+
+.lb-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.lb-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 0;
+}
+
+/* Räknare (spelade spel och omgångar) — vanliga siffror i dämpad ton. */
+.lb-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+/* Vunna står bredvid spelade i samma grupp och skiljs åt med grön ton. */
+.lb-count--won {
+  color: var(--green-500);
+  font-weight: 600;
+}
+
+/* Vunna spel och vunna omgångar ryms först från surfplattestorlek — iPad i
+   porträtt är 744 px bred, telefoner klarar inte åtta kolumner. */
+@media (max-width: 719px) {
+  .lb-col--wide { display: none; }
+}
+
+/* Telefon: knappare mått så att alla kolumner ryms utan sidoscroll. Blocket
+   måste ligga efter grundreglerna ovan för att vinna på samma specificitet. */
+@media (max-width: 480px) {
+  .lb-table {
+    font-size: 0.78rem;
+  }
+  .lb-table th,
+  .lb-table td {
+    padding: var(--space-xs) 2px;
+  }
+  .lb-table th:first-child,
+  .lb-table td:first-child { padding-left: var(--space-xs); }
+  .lb-table th:last-child,
+  .lb-table td:last-child { padding-right: var(--space-xs); }
+  .lb-sort-btn {
+    padding: var(--space-xs) 0;
+    font-size: 0.68rem;
+  }
+  .lb-name {
+    font-size: 0.8rem;
+  }
+  .lb-score {
+    font-size: 0.88rem;
+  }
+}
+
+/* Riktigt smala telefoner (iPhone SE m.fl.) — sista marginalen tas ur rubrikerna. */
+@media (max-width: 400px) {
+  .lb-sort-btn {
+    font-size: 0.63rem;
+  }
+}
+
+.lb-rate {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* Poängen sticker ut: rubrikfont, större och färgad. */
+.lb-score {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.lb-score.positive { color: var(--green-600); }
+.lb-score.negative { color: var(--red-600); }
+.lb-score.zero { color: var(--text-muted); }
 
 /* ─── Stats Cards Grid ───────────────────────────────────────────────────── */
 .stats-grid {
@@ -1986,6 +2073,23 @@ body {
   margin-bottom: var(--space-sm);
   padding-bottom: var(--space-xs);
   border-bottom: 1px solid var(--cream-300);
+}
+
+/* Short explanation of what a section's numbers mean. */
+.lb-table-wrap + .stats-section-note {
+  margin-top: var(--space-sm);
+}
+
+.stats-section-note {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  margin-bottom: var(--space-sm);
+}
+
+.stats-section-note strong {
+  color: var(--text-secondary);
+  font-weight: 700;
 }
 
 /* ─── Card frequency list ────────────────────────────────────────────────── */
