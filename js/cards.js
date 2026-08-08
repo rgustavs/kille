@@ -9,7 +9,7 @@ export const CARDS = [
   { id: 'kuku', name: 'Kuku', type: 'picture', points: 90, image: 'assets/cards/kuku.png?v=2' },
   { id: 'husar', name: 'Husar', type: 'picture', points: 80, image: 'assets/cards/husar.png?v=2' },
   { id: 'kavall', name: 'Kavall', type: 'picture', points: 70, image: 'assets/cards/kavall.png?v=2' },
-  { id: 'husu', name: 'Husu', type: 'picture', points: 75, image: 'assets/cards/husu.png?v=2' },
+  { id: 'husu', name: 'Husu', type: 'picture', points: 75, image: 'assets/cards/husu.png?v=3' },
   { id: 'vardshus', name: 'Värdshus', type: 'picture', points: 65, image: 'assets/cards/vardshus.png?v=2' },
 
   // === Number Cards (Sifferkort / Liljor) — points = number × 5 ===

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kille-cache-v28';
+const CACHE_NAME = 'kille-cache-v29';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -31,7 +31,7 @@ self.addEventListener('install', (event) => {
         './assets/cards/kuku.png?v=2',
         './assets/cards/husar.png?v=2',
         './assets/cards/kavall.png?v=2',
-        './assets/cards/husu.png?v=2',
+        './assets/cards/husu.png?v=3',
         './assets/cards/vardshus.png?v=2',
         './assets/cards/kransen.png?v=2',
         './assets/cards/blompotten.png?v=2',
