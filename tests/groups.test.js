@@ -102,6 +102,26 @@ async function runTests() {
     console.log('✅ offline outbox retention passes');
   } catch (err) { failures++; console.error('❌ offline outbox retention failed', err); }
 
+  // Test: en permanent avvisad operation (t.ex. inaktuell gruppkod) ska
+  // kastas ur kön istället för att fastna där för evigt och blockera allt
+  // som köas efter den.
+  try {
+    fetchMode = 'rpcError';
+    fetchCalls.length = 0;
+    PlayerStore.add('FörgiftadSpelare');
+    await wait(30);
+    assert.strictEqual(Outbox.pending(), 0, 'permanent avvisad operation ska kastas ur kön, inte fastna');
+    assert.strictEqual(fetchCalls.length, 1, 'operationen ska bara försökas en gång, inte i oändlighet');
+
+    fetchMode = 'ok';
+    fetchCalls.length = 0;
+    PlayerStore.add('EfterFelSpelare');
+    await wait(30);
+    assert.strictEqual(Outbox.pending(), 0, 'kön ska kunna fortsätta synka efter en avvisad operation');
+    assert.ok(fetchCalls.some(c => c.body.p_name === 'EfterFelSpelare'), 'senare ändringar ska fortfarande skickas');
+    console.log('✅ poisoned op does not wedge the outbox');
+  } catch (err) { failures++; console.error('❌ poisoned op does not wedge the outbox', err); }
+
   // Test: byte tillbaka till lokalt läge isolerar gruppdata.
   try {
     Session.setLocal();

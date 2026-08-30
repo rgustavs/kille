@@ -7,7 +7,7 @@
  * Misslyckas nätverket ligger ändringen kvar och skickas nästa gång appen är
  * online (vid uppstart, efter en lyckad pull eller efter nästa ändring).
  */
-import { rpc } from './supabase.js';
+import { rpc, RpcError } from './supabase.js';
 import { Session } from './session.js';
 
 // ─── Login & admin ────────────────────────────────────────────────────────────
@@ -254,21 +254,39 @@ export const Outbox = {
     this.flush();
   },
 
-  /** Skicka alla köade operationer i ordning. */
+  /**
+   * Skicka alla köade operationer i ordning. Ett nätverksfel avbryter och
+   * behåller kön för nästa försök. Men om servern avvisar en operation (t.ex.
+   * en inaktuell gruppkod eller en referens som inte längre finns) kan den
+   * aldrig lyckas — då kastas den ur kön så att den inte blockerar allt som
+   * kommer efter, istället för att fastna i "Synk misslyckades" för evigt.
+   */
   async flush() {
     if (flushing || !Session.isGroup()) return;
     let ops = readOutbox();
     if (ops.length === 0) return;
     flushing = true;
     emit('syncing', ops.length);
+    let hadError = false;
     try {
       while (ops.length > 0) {
-        await sendOp(ops[0]);
+        try {
+          await sendOp(ops[0]);
+        } catch (err) {
+          if (err instanceof RpcError && err.code !== 'NETWORK') {
+            hadError = true;
+            ops = readOutbox();
+            ops.shift();
+            writeOutbox(ops);
+            continue;
+          }
+          throw err;
+        }
         ops = readOutbox();
         ops.shift();
         writeOutbox(ops);
       }
-      emit('synced');
+      emit(hadError ? 'error' : 'synced');
     } catch (err) {
       emit('error', err);
     } finally {
