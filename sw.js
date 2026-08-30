@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kille-cache-v32';
+const CACHE_NAME = 'kille-cache-v33';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -23,6 +23,7 @@ self.addEventListener('install', (event) => {
         './js/tournament.js',
         './js/util.js',
         './manifest.json',
+        './assets/icons/card_values.png',
         './assets/icons/history.png',
         './assets/icons/import_export.jpg',
         './assets/icons/new_game.png',
