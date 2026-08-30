@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kille-cache-v29';
+const CACHE_NAME = 'kille-cache-v30';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -26,6 +26,7 @@ self.addEventListener('install', (event) => {
         './assets/icons/import_export.jpg',
         './assets/icons/new_game.png',
         './assets/icons/players.png',
+        './assets/icons/rules.png',
         './assets/icons/stats.png',
         './assets/cards/harlekin.png?v=2',
         './assets/cards/kuku.png?v=2',
