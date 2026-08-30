@@ -16,7 +16,7 @@ import {
   createTournament, addTournamentRound, removeTournamentRound, completeTournament,
   reopenTournament, addParticipants, removeParticipant, computeStandings, rankedTables,
   tournamentResult, getFinalRound, drawTables, splitInOrder, tableCountFor, tableCountRange,
-  MIN_GAME_SIZE, MAX_GAME_SIZE, MAX_TABLE_SIZE
+  MIN_GAME_SIZE, MAX_GAME_SIZE, PREFERRED_TABLE_SIZE
 } from './tournament.js';
 import { GroupData } from './store.js';
 import { downloadExport, importFile } from './importexport.js';
@@ -2273,7 +2273,7 @@ function openTournamentRoundModal() {
     method: tournament.rounds.length > 0 ? 'smart' : 'random',
     selected: new Set(tournament.playerIds),
     tableCount: tableCountFor(tournament.playerIds.length),
-    finalCount: Math.min(MAX_TABLE_SIZE, tournament.playerIds.length),
+    finalCount: Math.min(PREFERRED_TABLE_SIZE, tournament.playerIds.length),
     includeRest: true, // spelar övriga en sista omgång, eller bara finalbordet?
     tables: []
   };

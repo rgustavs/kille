@@ -19,6 +19,12 @@ import { uid } from './util.js';
 export const MIN_TABLE_SIZE = 4;
 export const MAX_TABLE_SIZE = 7;
 
+/**
+ * Bordsstorleken som lottningen siktar på. Antalet bord väljs så att borden
+ * hamnar så nära den här storleken som möjligt, inom [MIN, MAX].
+ */
+export const PREFERRED_TABLE_SIZE = 5;
+
 /** Ett Kille-spel klarar 2–8 spelare; finalen spelas alltid vid ett bord. */
 export const MIN_GAME_SIZE = 2;
 export const MAX_GAME_SIZE = 8;
@@ -153,8 +159,9 @@ export function shuffle(list, rng = Math.random) {
 }
 
 /**
- * Hur många bord ett antal spelare bör delas upp på, givet önskad bordsstorlek.
- * Väljer minsta antal bord som får plats inom [min, max] spelare per bord.
+ * Hur många bord ett antal spelare bör delas upp på. Bland de uppdelningar som
+ * håller sig inom [min, max] spelare per bord väljs den vars bord ligger närmast
+ * PREFERRED_TABLE_SIZE; står två lika vinner det färre antalet bord.
  */
 export function tableCountFor(playerCount, min = MIN_TABLE_SIZE, max = MAX_TABLE_SIZE) {
   const n = Number(playerCount) || 0;
@@ -164,9 +171,20 @@ export function tableCountFor(playerCount, min = MIN_TABLE_SIZE, max = MAX_TABLE
   if (n <= max) return 1;
   const lowest = Math.ceil(n / max);
   const highest = Math.floor(n / min);
-  for (let t = lowest; t <= highest; t++) return t;
   // Går inte att fylla alla bord till minimistorleken — ta minsta möjliga antal.
-  return lowest;
+  if (highest < lowest) return lowest;
+
+  let best = lowest;
+  let bestCost = Infinity;
+  for (let t = lowest; t <= highest; t++) {
+    const cost = tableSizes(n, t)
+      .reduce((sum, size) => sum + Math.abs(size - PREFERRED_TABLE_SIZE), 0);
+    if (cost < bestCost) {
+      bestCost = cost;
+      best = t;
+    }
+  }
+  return best;
 }
 
 /** Jämnt fördelade bordsstorlekar (de största borden först). */

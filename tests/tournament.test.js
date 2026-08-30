@@ -8,6 +8,7 @@ import {
   removeParticipant,
   tableCountFor,
   tableSizes,
+  PREFERRED_TABLE_SIZE,
   tableCountRange,
   drawTables,
   pickPlayers,
@@ -94,7 +95,7 @@ function runTests() {
     console.error('❌ removeParticipant guard failed', err);
   }
 
-  // Test: table counts and sizes (4–7 players per table)
+  // Test: table counts and sizes (4–7 per table, as close to 5 as possible)
   try {
     assert.strictEqual(tableCountFor(6), 1);
     assert.strictEqual(tableCountFor(8), 2);
@@ -104,12 +105,24 @@ function runTests() {
     assert.deepStrictEqual(tableSizes(8, 2), [4, 4]);
     assert.deepStrictEqual(tableSizes(11, 2), [6, 5]);
     assert.deepStrictEqual(tableSizes(15, 3), [5, 5, 5]);
-    // Varje automatiskt val ska hålla sig inom 4–7 spelare per bord.
+    // Femmannabord är förvalet: uppdelningen med bord närmast fem vinner.
+    assert.deepStrictEqual(tableSizes(13, tableCountFor(13)), [5, 4, 4]);
+    assert.deepStrictEqual(tableSizes(14, tableCountFor(14)), [5, 5, 4]);
+    assert.deepStrictEqual(tableSizes(18, tableCountFor(18)), [5, 5, 4, 4]);
+    assert.deepStrictEqual(tableSizes(20, tableCountFor(20)), [5, 5, 5, 5]);
+    assert.deepStrictEqual(tableSizes(25, tableCountFor(25)), [5, 5, 5, 5, 5]);
+    // Varje automatiskt val ska hålla sig inom 4–7 spelare per bord, och
+    // genomsnittet ska ligga inom en spelare från femmannabordet.
     for (let n = MIN_TABLE_SIZE; n <= 40; n++) {
       const sizes = tableSizes(n, tableCountFor(n));
       assert.ok(sizes.every(s => s >= MIN_TABLE_SIZE && s <= MAX_TABLE_SIZE),
         `Ogiltiga bordsstorlekar för ${n} spelare: ${sizes}`);
       assert.strictEqual(sizes.reduce((a, b) => a + b, 0), n);
+      if (n > MAX_TABLE_SIZE) {
+        const average = n / sizes.length;
+        assert.ok(Math.abs(average - PREFERRED_TABLE_SIZE) <= 1,
+          `Bordsstorleken för ${n} spelare ligger för långt från ${PREFERRED_TABLE_SIZE}: ${sizes}`);
+      }
     }
     console.log('✅ tableCountFor/tableSizes passes');
   } catch (err) {
@@ -286,9 +299,9 @@ function runTests() {
   // Test: rankedTables seeds every participant by table position
   try {
     const standings = Array.from({ length: 15 }, (_, i) => ({ playerId: `p${i + 1}`, rank: i + 1 }));
-    const tables = rankedTables(standings, 5);
+    const tables = rankedTables(standings, PREFERRED_TABLE_SIZE);
     assert.deepStrictEqual(tables[0], ['p1', 'p2', 'p3', 'p4', 'p5']);
-    assert.strictEqual(tables.flat().length, 15);
+    assert.deepStrictEqual(tables.map(t => t.length), [5, 5, 5]);
     assert.strictEqual(new Set(tables.flat()).size, 15);
     assert.ok(tables.every(t => t.length >= MIN_TABLE_SIZE && t.length <= MAX_TABLE_SIZE));
     // Borden följer tabellordningen: bord 2 tar nästa grupp.

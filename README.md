@@ -9,7 +9,7 @@ Designed to be resilient, it works fully offline via a Progressive Web App (PWA)
 - **Groups & shared central database**: On first launch you choose whether to **log in to a group** (shared roster, protocols and statistics via a central Supabase database) or **work locally** (everything stays on the device). Group members share a common game database in real time, and a **group admin** manages the group.
 - **2-8 Player Matches**: Manage player rosters with avatars and multi-game persistence.
 - **Tournaments**: Run a tournament over several rounds, each splitting the participants across
-  parallel tables of 4–7 players. Draw the tables at random, with a *smart* draw that avoids
+  parallel tables of 4–7 players (five per table by default). Draw the tables at random, with a *smart* draw that avoids
   repeat meetings, or by hand. The tournament table sums the Kille scores from every table, and
   the tournament is decided either by that table or by a ranked last round where everyone plays,
   seeded by table position — the winner of the top table wins the tournament.
@@ -118,9 +118,11 @@ put together:
 | **Urval** | You place the players yourself — tap a player in the preview to move them to the next table. |
 | **Slutomgång** | Seeds by table position: the top *N* meet at the deciding table ("finalbordet"), *N* chosen when the round is drawn. You are then asked whether the remaining players should play a last round too — if they do, they are split across table 2 and downwards in table order; if not, they stand over and are placed by the standings. |
 
-The number of tables is suggested automatically (the fewest tables that keep every table
-within 4–7 players) and can be adjusted by hand; a table always holds 2–8 players, the
-range a Kille game allows.
+The number of tables is suggested automatically: **five players per table is the default**,
+so the split whose tables sit closest to five (within 4–7) is chosen — 13 participants become
+5+4+4, 20 become 5+5+5+5. It can be adjusted by hand, and a table always holds 2–8 players,
+the range a Kille game allows. The deciding table of a ranked last round defaults to five
+players as well.
 
 **The table.** The standings sum each participant's final score from every table they
 have played, and that sum is what the tournament is ranked by. Tables played, tables won,
