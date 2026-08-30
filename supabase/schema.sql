@@ -81,6 +81,19 @@ create table if not exists public.kille_group_games (
   primary key (group_id, id)
 );
 
+-- Turneringar: deltagare, omgångar och bord. Varje bord pekar på ett spel i
+-- kille_group_games via spelets id, så protokollen delas med den vanliga
+-- historiken och statistiken.
+create table if not exists public.kille_group_tournaments (
+  id         text not null,
+  group_id   uuid not null references public.kille_groups(id) on delete cascade,
+  data       jsonb not null,
+  status     text not null default 'active',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (group_id, id)
+);
+
 -- Användnings-/aktivitetslogg (append-only). Fylls dels automatiskt inifrån
 -- SECURITY DEFINER-funktionerna nedan (data-/sessionshändelser, admin-åtgärder),
 -- dels av klienten via kille_log_activity (produktanalys: skärmvisningar m.m.).
@@ -106,6 +119,7 @@ alter table public.kille_groups          enable row level security;
 alter table public.kille_group_members   enable row level security;
 alter table public.kille_group_players   enable row level security;
 alter table public.kille_group_games     enable row level security;
+alter table public.kille_group_tournaments enable row level security;
 alter table public.kille_admins          enable row level security;
 alter table public.kille_activity        enable row level security;
 
@@ -113,6 +127,7 @@ revoke all on public.kille_groups        from anon, authenticated;
 revoke all on public.kille_group_members from anon, authenticated;
 revoke all on public.kille_group_players from anon, authenticated;
 revoke all on public.kille_group_games   from anon, authenticated;
+revoke all on public.kille_group_tournaments from anon, authenticated;
 revoke all on public.kille_admins        from anon, authenticated;
 revoke all on public.kille_activity      from anon, authenticated;
 
@@ -259,6 +274,10 @@ as $$
     'games', coalesce((
       select jsonb_agg(gm.data order by gm.created_at)
       from public.kille_group_games gm where gm.group_id = p_group_id
+    ), '[]'::jsonb),
+    'tournaments', coalesce((
+      select jsonb_agg(tn.data order by tn.created_at)
+      from public.kille_group_tournaments tn where tn.group_id = p_group_id
     ), '[]'::jsonb)
   );
 $$;
@@ -573,6 +592,61 @@ begin
   perform public._kille_touch_member(p_group_id, p_member_id);
   perform public._kille_log(p_group_id, p_member_id, p_member_name,
     'game_deleted', 'data', jsonb_build_object('gameId', p_id));
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
+-- Spara (upsert) en hel turnering i den centrala databasen. Turneringens bord
+-- pekar på vanliga spel, som sparas för sig via kille_save_game.
+drop function if exists public.kille_save_tournament(uuid, text, jsonb);
+create or replace function public.kille_save_tournament(
+  p_group_id uuid, p_join_code text, p_tournament jsonb,
+  p_member_id uuid default null, p_member_name text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_id text := p_tournament->>'id';
+  v_existed boolean;
+begin
+  perform public._kille_group_by_code(p_group_id, p_join_code);
+  if v_id is null then
+    raise exception 'TOURNAMENT_ID_REQUIRED' using errcode = '22023';
+  end if;
+  select exists(select 1 from public.kille_group_tournaments where group_id = p_group_id and id = v_id)
+    into v_existed;
+  insert into public.kille_group_tournaments (id, group_id, data, status)
+  values (v_id, p_group_id, p_tournament, coalesce(p_tournament->>'status', 'active'))
+  on conflict (group_id, id)
+  do update set data = excluded.data, status = excluded.status, updated_at = now();
+  perform public._kille_touch_member(p_group_id, p_member_id);
+  perform public._kille_log(p_group_id, p_member_id, p_member_name,
+    case when v_existed then 'tournament_updated' else 'tournament_saved' end, 'data',
+    jsonb_build_object('tournamentId', v_id, 'status', coalesce(p_tournament->>'status', 'active')));
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
+-- Ta bort en turnering. Spelen den pekar på ligger kvar i historiken.
+drop function if exists public.kille_delete_tournament(uuid, text, text);
+create or replace function public.kille_delete_tournament(
+  p_group_id uuid, p_join_code text, p_id text,
+  p_member_id uuid default null, p_member_name text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+begin
+  perform public._kille_group_by_code(p_group_id, p_join_code);
+  delete from public.kille_group_tournaments where group_id = p_group_id and id = p_id;
+  perform public._kille_touch_member(p_group_id, p_member_id);
+  perform public._kille_log(p_group_id, p_member_id, p_member_name,
+    'tournament_deleted', 'data', jsonb_build_object('tournamentId', p_id));
   return jsonb_build_object('ok', true);
 end;
 $$;
@@ -1125,6 +1199,8 @@ grant execute on function
   public.kille_delete_player(uuid, text, text, uuid, text),
   public.kille_save_game(uuid, text, jsonb, uuid, text),
   public.kille_delete_game(uuid, text, text, uuid, text),
+  public.kille_save_tournament(uuid, text, jsonb, uuid, text),
+  public.kille_delete_tournament(uuid, text, text, uuid, text),
   public.kille_log_activity(uuid, text, uuid, text, jsonb),
   public.kille_leave_group(uuid, text, uuid),
   public.kille_admin_rename_group(uuid, text, text, text),

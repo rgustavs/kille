@@ -1,16 +1,16 @@
 /**
  * Kille Import/Export
- * Handles serialisation of all player and game data to/from JSON files.
+ * Handles serialisation of all player, game and tournament data to/from JSON files.
  */
-import { PlayerStore, GameStore } from './store.js';
+import { PlayerStore, GameStore, TournamentStore } from './store.js';
 import { getCardById } from './cards.js';
 
-const FORMAT_VERSION = '1.0';
+const FORMAT_VERSION = '1.1';
 
 // ─── Export ──────────────────────────────────────────────────────────────────
 
 /**
- * Serialise all players and games to a JSON string.
+ * Serialise all players, games and tournaments to a JSON string.
  * @returns {string} Pretty-printed JSON
  */
 export function exportData() {
@@ -18,7 +18,8 @@ export function exportData() {
     version: FORMAT_VERSION,
     exportedAt: new Date().toISOString(),
     players: PlayerStore.getAll(),
-    games: GameStore.getAll()
+    games: GameStore.getAll(),
+    tournaments: TournamentStore.getAll()
   };
   return JSON.stringify(payload, null, 2);
 }
@@ -48,10 +49,11 @@ export function downloadExport() {
  * unknown players are created. All player IDs in the incoming games are
  * remapped to the local IDs before saving.
  *
- * Game deduplication: games whose ID already exists locally are skipped.
+ * Game deduplication: games whose ID already exists locally are skipped. The same
+ * goes for tournaments, which keep pointing at the games their tables reference.
  *
  * @param {string} jsonString
- * @returns {{ playersAdded: number, gamesAdded: number }}
+ * @returns {{ playersAdded: number, gamesAdded: number, tournamentsAdded: number }}
  * @throws {Error} if the file is not a valid Kille export
  */
 export function importData(jsonString) {
@@ -95,13 +97,22 @@ export function importData(jsonString) {
     gamesAdded++;
   }
 
-  return { playersAdded, gamesAdded };
+  // Turneringar (valfritt — filer från äldre versioner saknar dem)
+  const existingTournamentIds = new Set(TournamentStore.getAll().map(t => t.id));
+  let tournamentsAdded = 0;
+  for (const tournament of payload.tournaments || []) {
+    if (existingTournamentIds.has(tournament.id)) continue;
+    TournamentStore.save(remapTournamentIds(tournament, idMap));
+    tournamentsAdded++;
+  }
+
+  return { playersAdded, gamesAdded, tournamentsAdded };
 }
 
 /**
  * Read a File object and import its contents.
  * @param {File} file
- * @returns {Promise<{ playersAdded: number, gamesAdded: number }>}
+ * @returns {Promise<{ playersAdded: number, gamesAdded: number, tournamentsAdded: number }>}
  */
 export function importFile(file) {
   return new Promise((resolve, reject) => {
@@ -134,6 +145,18 @@ function remapGameIds(game, idMap) {
   };
 }
 
+function remapTournamentIds(tournament, idMap) {
+  const map = id => idMap[id] ?? id;
+  return {
+    ...tournament,
+    playerIds: tournament.playerIds.map(map),
+    rounds: tournament.rounds.map(round => ({
+      ...round,
+      tables: round.tables.map(table => ({ ...table, playerIds: table.playerIds.map(map) }))
+    }))
+  };
+}
+
 function validateImportPayload(payload) {
   const importedPlayerIds = new Set();
   payload.players.forEach(player => {
@@ -141,6 +164,27 @@ function validateImportPayload(payload) {
       throw new Error('Ogiltig spelare i importfilen');
     }
     importedPlayerIds.add(player.id);
+  });
+
+  (payload.tournaments || []).forEach(tournament => {
+    if (!tournament || typeof tournament.id !== 'string' || typeof tournament.name !== 'string' ||
+        !Array.isArray(tournament.playerIds) || !Array.isArray(tournament.rounds)) {
+      throw new Error('Ogiltig turnering i importfilen');
+    }
+    if (tournament.playerIds.some(id => !importedPlayerIds.has(id))) {
+      throw new Error('Turneringen refererar till okänd spelare');
+    }
+    tournament.rounds.forEach(round => {
+      if (!round || !Array.isArray(round.tables)) {
+        throw new Error('Ogiltig omgång i turneringen');
+      }
+      round.tables.forEach(table => {
+        if (!table || !Array.isArray(table.playerIds) ||
+            table.playerIds.some(id => !importedPlayerIds.has(id))) {
+          throw new Error('Turneringsbordet refererar till okänd spelare');
+        }
+      });
+    });
   });
 
   payload.games.forEach(game => {
