@@ -29,7 +29,7 @@ export const CARDS = [
   // === Zero Cards (Nollkort) ===
   { id: 'kransen', name: 'Kransen', type: 'zero', points: 0, image: 'assets/cards/kransen.png?v=2' },
   { id: 'blompotten', name: 'Blompotten', type: 'zero', points: 0, image: 'assets/cards/blompotten.png?v=2' },
-  { id: 'blaren', name: 'Blaren', type: 'zero', points: 0, image: 'assets/cards/blaren.png?v=2' },
+  { id: 'blaren', name: 'Blaren', type: 'zero', points: 0, image: 'assets/cards/blaren.png?v=3' },
 ];
 
 /**
