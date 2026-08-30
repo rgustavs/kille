@@ -219,7 +219,8 @@
 
     <!-- ── Tournaments (list) ── -->
     <section class="screen app-content" id="screen-tournaments">
-      <button class="btn btn--gold btn--full mb-lg" id="btn-new-tournament">⚜ Ny turnering</button>
+      <button class="btn btn--gold btn--full" id="btn-new-tournament">⚜ Ny turnering</button>
+      <button class="btn btn--ghost btn--full mt-sm mb-lg" id="btn-tournament-help">📖 Så funkar turneringar</button>
       <div class="tournament-list" id="tournament-list"></div>
       <div class="empty-state" id="tournaments-empty" style="display:none">
         <div class="empty-state__icon">🏆</div>
@@ -251,6 +252,129 @@
         <div id="tournament-content"></div>
       </div>
       <div class="game-actions" id="tournament-actions"></div>
+    </section>
+
+    <!-- ── Tournament help ── -->
+    <section class="screen app-content" id="screen-tournament-help">
+      <p class="rules-intro">Så fungerar turneringar i appen: flera bord per omgång, en gemensam tabell och en slutomgång som kan avgöra alltihop.</p>
+
+      <div class="rules-list">
+        <details class="rules-item" open>
+          <summary class="rules-item__title">Så hänger det ihop</summary>
+          <div class="rules-item__body">
+            <p>En turnering samlar ihop flera vanliga Kille-spel till en gemensam tävling:</p>
+            <ul>
+              <li>Du väljer <strong>deltagare</strong> när turneringen skapas — de kan vara fler än vad som får plats vid ett bord.</li>
+              <li>Varje <strong>omgång</strong> delar upp deltagarna på ett eller flera <strong>bord</strong>.</li>
+              <li>Varje bord spelas som ett vanligt spel med eget protokoll.</li>
+              <li><strong>Tabellen</strong> är summan av deltagarnas slutställning från alla bord de spelat.</li>
+              <li>Turneringen avgörs av tabellen, eller av en <strong>slutomgång</strong> där de bästa möts vid ett finalbord.</li>
+            </ul>
+            <figure class="help-figure">
+              <img class="help-shot" src="assets/help/tournaments.png?v=1" alt="Listan med turneringar: en pågående och en avslutad turnering" width="800" height="802" loading="lazy">
+              <figcaption class="help-figure__caption">Turneringslistan visar om en turnering pågår eller är avslutad, hur många deltagare, omgångar och bord den har — och vem som vann.</figcaption>
+            </figure>
+            <p>Spelen ligger kvar i <em>Historik</em> och räknas in i <em>Statistik</em> precis som vanliga spel, märkta med turneringen de tillhör.</p>
+          </div>
+        </details>
+
+        <details class="rules-item">
+          <summary class="rules-item__title">Skapa en turnering</summary>
+          <div class="rules-item__body">
+            <p>Tryck på <strong>⚜ Ny turnering</strong> högst upp i turneringslistan.</p>
+            <ol>
+              <li>Ge turneringen ett <strong>namn</strong> — lämnar du det tomt får den dagens datum.</li>
+              <li>Välj <strong>deltagare</strong> bland spelarna genom att trycka på dem. Nya spelare kan läggas till direkt här.</li>
+              <li>Tryck på <strong>Skapa turnering</strong>. Det krävs minst 2 deltagare.</li>
+            </ol>
+            <figure class="help-figure">
+              <img class="help-shot" src="assets/help/setup.png?v=1" alt="Skärmen Ny turnering med namn ifyllt och sex deltagare valda" width="800" height="1580" loading="lazy">
+              <figcaption class="help-figure__caption">Valda deltagare är gröna. Räknaren under rutnätet visar hur många som är med.</figcaption>
+            </figure>
+            <p>Turneringen öppnas direkt och är redo för sin första omgång.</p>
+          </div>
+        </details>
+
+        <details class="rules-item">
+          <summary class="rules-item__title">Omgångar och bord</summary>
+          <div class="rules-item__body">
+            <p>Under fliken <strong>Omgångar</strong> ser du varje spelad omgång och dess bord. Tryck på ett bord för att öppna protokollet: pågående bord fortsätter du spela, färdiga bord visas som ett spelprotokoll.</p>
+            <figure class="help-figure">
+              <img class="help-shot" src="assets/help/rounds.png?v=1" alt="Fliken Omgångar med två omgångar och deras bord" width="800" height="1640" loading="lazy">
+              <figcaption class="help-figure__caption">Varje bord visar deltagarna och en statusrad: <em>Inte påbörjat</em>, <em>Pågår</em> med ledaren, eller <em>Klart</em> med bordets vinnare.</figcaption>
+            </figure>
+            <p>Ett bord är ett helt vanligt Kille-spel med 2–8 spelare. Lottningen siktar på 5 spelare per bord och håller sig till 4–7 när deltagarna delas upp automatiskt.</p>
+            <p>✕ på en omgång tar bort den. Då raderas också bordens protokoll, och de följande omgångarna numreras om.</p>
+          </div>
+        </details>
+
+        <details class="rules-item">
+          <summary class="rules-item__title">Lotta en omgång</summary>
+          <div class="rules-item__body">
+            <p>Tryck på <strong>⚜ Ny omgång</strong> längst ner i turneringen. I dialogen väljer du hur borden sätts ihop:</p>
+            <ul>
+              <li><strong>🎲 Slump</strong> — deltagarna lottas fritt till borden.</li>
+              <li><strong>🧠 Smart slump</strong> — lottar så att de som mötts minst tidigare hamnar vid samma bord. Bra från omgång två och framåt.</li>
+              <li><strong>✋ Urval</strong> — du bestämmer själv. Tryck på en spelare i förhandsvisningen för att flytta hen till nästa bord.</li>
+              <li><strong>🏆 Slutomgång</strong> — rankade bord efter tabellen (se nästa avsnitt). Kräver minst en spelad omgång.</li>
+            </ul>
+            <figure class="help-figure">
+              <img class="help-shot" src="assets/help/draw.png?v=1" alt="Dialogen Ny omgång med lottningsmetod, deltagare, antal bord och förhandsvisning" width="800" height="1758" loading="lazy">
+              <figcaption class="help-figure__caption">Alla deltagare är valda från start — tryck bort den som sitter över just den här omgången. Med − och ＋ ändrar du antalet bord, och <em>↻ Blanda om</em> gör en ny lottning.</figcaption>
+            </figure>
+            <p>Förhandsvisningen längst ner visar borden innan du startar. När du trycker på <strong>Starta omgången</strong> skapas ett tomt protokoll för varje bord.</p>
+          </div>
+        </details>
+
+        <details class="rules-item">
+          <summary class="rules-item__title">Tabellen</summary>
+          <div class="rules-item__body">
+            <p>Fliken <strong>Tabell</strong> är turneringens ställning. <strong>Poäng</strong> är summan av deltagarens slutställning från varje spelat bord — det är den tabellen rankas efter.</p>
+            <figure class="help-figure">
+              <img class="help-shot" src="assets/help/standings.png?v=1" alt="Turneringstabellen med placering, deltagare, antal bord och poäng" width="800" height="1616" loading="lazy">
+              <figcaption class="help-figure__caption">Ledaren är markerad. Tryck på en rubrik för att sortera om tabellen; <strong>#</strong> återställer grundsorteringen.</figcaption>
+            </figure>
+            <p>På en bredare skärm visas fler kolumner: <strong>Vunna bord</strong> (bord där deltagaren hade flest poäng), <strong>Omgångar</strong> och <strong>Vunna omg.</strong> (omgångar vid bordet).</p>
+            <p>Står två deltagare på samma poäng avgörs ordningen av flest vunna bord, därefter flest vunna omgångar.</p>
+            <p>Att spela fler bord ger fler chanser till poäng — så håll gärna antalet spelade bord jämnt mellan deltagarna, eller låt en slutomgång avgöra.</p>
+          </div>
+        </details>
+
+        <details class="rules-item">
+          <summary class="rules-item__title">Slutomgång och finalbord</summary>
+          <div class="rules-item__body">
+            <p>Väljer du <strong>🏆 Slutomgång</strong> när du lottar sätts borden ihop efter tabellen istället för på slump: de högst rankade möts vid <strong>finalbordet</strong>, nästa grupp vid bord 2 och så vidare.</p>
+            <figure class="help-figure">
+              <img class="help-shot" src="assets/help/final.png?v=1" alt="Dialogen för slutomgång med antal spelare vid finalbordet och rankade bord" width="800" height="1752" loading="lazy">
+              <figcaption class="help-figure__caption">Varje spelare visas med sin placering och poäng i tabellen. Med − och ＋ bestämmer du hur många som spelar vid finalbordet.</figcaption>
+            </figure>
+            <p>Du väljer också om övriga ska spela en sista omgång på egna bord, eller om bara finalbordet spelar. Står övriga över placeras de efter tabellen i slutresultatet.</p>
+            <p><strong>Finalbordets placering avgör turneringen.</strong> Den som vinner finalbordet vinner turneringen, oavsett hur tabellen såg ut innan — sedan följer bord 2 och neråt.</p>
+          </div>
+        </details>
+
+        <details class="rules-item">
+          <summary class="rules-item__title">Avsluta och se resultatet</summary>
+          <div class="rules-item__body">
+            <p>Tryck på <strong>Avsluta</strong> när turneringen är färdigspelad. Finns bord som inte avslutats räknas deras poäng som de står — appen påminner om det innan.</p>
+            <figure class="help-figure">
+              <img class="help-shot" src="assets/help/result.png?v=1" alt="Slutresultatet som prispall med de tre bästa och listan därefter" width="704" height="1260" loading="lazy">
+              <figcaption class="help-figure__caption">Slutresultatet visas som en prispall. Noten under rubriken talar om ifall turneringen avgjordes av finalbordet eller av tabellen.</figcaption>
+            </figure>
+            <p>En avslutad turnering står stilla — deltagarlistan går inte att ändra. Behöver ni spela mer trycker du på <strong>Återöppna</strong>, och <strong>🏆 Resultat</strong> visar prispallen igen.</p>
+            <p>Tar du bort en turnering ur listan ligger bordens spel kvar i historiken.</p>
+          </div>
+        </details>
+
+        <details class="rules-item">
+          <summary class="rules-item__title">Deltagare under turneringens gång</summary>
+          <div class="rules-item__body">
+            <p>Under fliken <strong>Deltagare</strong> kan du lägga till fler medan turneringen pågår — antingen en befintlig spelare eller en helt ny. En sen tillkommen deltagare får så klart färre spelade bord, vilket syns i tabellen.</p>
+            <p>En deltagare kan bara tas bort så länge hen inte spelat någon omgång. Annars skulle tabellen och bordens protokoll sluta hänga ihop.</p>
+            <p>Vem som spelar en enskild omgång väljer du i lottningsdialogen — den som sitter över en omgång är fortfarande med i turneringen.</p>
+          </div>
+        </details>
+      </div>
     </section>
 
     <!-- ── Statistics ── -->

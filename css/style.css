@@ -2963,6 +2963,32 @@ body {
   color: var(--text-muted);
 }
 
+/* ─── Tournament Help Screen ──────────────────────────────────────────────── */
+/* Bygger vidare på .rules-* ovan; här bara skärmbilderna med sina bildtexter. */
+.help-figure {
+  margin: var(--space-md) 0;
+}
+
+.help-shot {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  height: auto;
+  margin: 0 auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--cream-300);
+  box-shadow: var(--shadow-card);
+}
+
+.help-figure__caption {
+  margin: var(--space-sm) auto 0;
+  max-width: 34rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  line-height: 1.45;
+  text-align: center;
+}
+
 /* ─── Printable Card Values Sheet (PDF) ───────────────────────────────────── */
 /* Hidden on screen; revealed only via the print stylesheet below. */
 .cv-print {

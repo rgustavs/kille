@@ -109,6 +109,7 @@ function updateHeader(screenId) {
     tournament: 'Turnering',
     cards: 'Kortvärden',
     rules: 'Spelregler',
+    'tournament-help': 'Så funkar turneringar',
     group: 'Grupp',
     admin: 'Super-admin'
   };
@@ -136,6 +137,7 @@ function renderScreen(screenId) {
     case 'tournament': renderTournament(); break;
     case 'cards': renderCardValues(); break;
     case 'rules': break; // static content
+    case 'tournament-help': break; // static content
     case 'group': renderGroup(); break;
     case 'admin': renderAdmin(); break;
     case 'view-game': break; // rendered when entering
@@ -3251,6 +3253,7 @@ function bindEvents() {
   $('#btn-stats').addEventListener('click', () => navigateTo('stats'));
   $('#btn-card-values').addEventListener('click', () => navigateTo('cards'));
   $('#btn-rules').addEventListener('click', () => navigateTo('rules'));
+  $('#btn-tournament-help').addEventListener('click', () => navigateTo('tournament-help'));
   $('#btn-print-cards').addEventListener('click', () => window.print());
   $('#btn-export').addEventListener('click', handleExport);
   $('#btn-import').addEventListener('click', handleImport);
