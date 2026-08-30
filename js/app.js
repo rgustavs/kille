@@ -3,7 +3,7 @@
  * Handles all screen navigation, rendering, and user interactions.
  */
 import { CARDS, getCardById, getCardsByType, sortCardsByRank } from './cards.js';
-import { PlayerStore, GameStore } from './store.js';
+import { PlayerStore, GameStore, TournamentStore } from './store.js';
 import {
   createGame, addRound, removeLastRound, completeGame, calculateScoreTable,
   NEKEN_PENALTY, LOW_STAKE_THRESHOLD
@@ -12,6 +12,12 @@ import {
   computeAdvancedStats, getMostCommonCard, getMostCommonWinnerCard,
   getCardsInDisplayOrder, getLeaderboard, buildHistogram
 } from './stats.js';
+import {
+  createTournament, addTournamentRound, removeTournamentRound, completeTournament,
+  reopenTournament, addParticipants, removeParticipant, computeStandings, qualifiers,
+  tournamentResult, getFinalRound, drawTables, splitInOrder, tableCountFor, tableCountRange,
+  MIN_GAME_SIZE, MAX_GAME_SIZE, MAX_TABLE_SIZE
+} from './tournament.js';
 import { GroupData } from './store.js';
 import { downloadExport, importFile } from './importexport.js';
 import { $, $$, escHtml, avatarInitial, formatScore, showToast, addSwipeToDismiss } from './dom.js';
@@ -54,6 +60,15 @@ let leaderboardSort = { key: null, dir: 'desc' };
 // Sorteringen i "Mot andra spelare". null = flest omgångar tillsammans först.
 let h2hSort = { key: null, dir: 'desc' };
 
+// Turnering
+let openTournamentId = null;                    // turneringen som visas
+let tournamentSetupSelection = new Set();       // deltagare i "Ny turnering"
+let tournamentTab = 'table';                    // 'table' | 'rounds' | 'players'
+let standingsSort = { key: null, dir: 'desc' }; // sortering i turneringstabellen
+let trState = null;                             // pågående lottning av en omgång
+// Vart podiet återvänder när det stängs (null = hem).
+let podiumReturn = null;
+
 // ═══════════════════════════════════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════════════════════════════════
@@ -89,6 +104,9 @@ function updateHeader(screenId) {
     history: 'Historik',
     'view-game': 'Spelprotokoll',
     stats: 'Statistik',
+    tournaments: 'Turneringar',
+    'tournament-setup': 'Ny turnering',
+    tournament: 'Turnering',
     cards: 'Kortvärden',
     rules: 'Spelregler',
     group: 'Grupp',
@@ -113,6 +131,9 @@ function renderScreen(screenId) {
     case 'game': renderGame(); break;
     case 'history': renderHistory(); break;
     case 'stats': renderStats(); break;
+    case 'tournaments': renderTournaments(); break;
+    case 'tournament-setup': renderTournamentSetup(); break;
+    case 'tournament': renderTournament(); break;
     case 'cards': renderCardValues(); break;
     case 'rules': break; // static content
     case 'group': renderGroup(); break;
@@ -691,6 +712,9 @@ const EVENT_LABELS = {
   game_saved: '🃏 Sparade spel',
   game_updated: '✏️ Uppdaterade spel',
   game_deleted: '🗑️ Raderade spel',
+  tournament_saved: '🏆 Skapade turnering',
+  tournament_updated: '🏆 Uppdaterade turnering',
+  tournament_deleted: '🗑️ Raderade turnering',
   player_added: '➕ La till spelare',
   player_renamed: '✏️ Bytte spelarnamn',
   player_removed: '➖ Tog bort spelare',
@@ -1602,6 +1626,9 @@ function endGame() {
     GameStore.save(activeGame);
     GameStore.clearActive();
     Activity.track('feature_used', { feature: 'complete_game', rounds: activeGame.rounds.length });
+    // Hör bordet till en turnering går resan tillbaka dit, inte hem.
+    const tournament = TournamentStore.forGame(activeGame.id);
+    podiumReturn = tournament ? { tournamentId: tournament.id } : null;
     showGameEndLeaderboard(activeGame);
     activeGame = null;
   });
@@ -1617,7 +1644,14 @@ function showGameEndLeaderboard(game) {
       score: totals[pid] || 0
     }))
     .sort((a, b) => b.score - a.score);
+  showPodium(ranked);
+}
 
+/**
+ * Visa podiet med en färdigrankad lista, `{ name, score }` med bäst först.
+ * Används både när ett spel avslutas och när en turnering är avgjord.
+ */
+function showPodium(ranked, options = {}) {
   const medals = ['🥇', '🥈', '🥉'];
   // Podium order: 2nd, 1st, 3rd (visual layout)
   const podiumOrder = [1, 0, 2];
@@ -1658,11 +1692,25 @@ function showGameEndLeaderboard(game) {
     restEl.innerHTML = '';
   }
 
+  $('#leaderboard-title').textContent = options.title || 'Slutresultat';
+  const noteEl = $('#leaderboard-note');
+  noteEl.textContent = options.note || '';
+  noteEl.style.display = options.note ? '' : 'none';
+
   $('#leaderboard-overlay').classList.add('active');
 }
 
 function closeLeaderboard() {
   $('#leaderboard-overlay').classList.remove('active');
+  const back = podiumReturn;
+  podiumReturn = null;
+  if (back?.tournamentId && TournamentStore.get(back.tournamentId)) {
+    openTournamentId = back.tournamentId;
+    navigateTo('tournament', { replace: true });
+    screenStack.length = 0;
+    screenStack.push('home', 'tournaments');
+    return;
+  }
   navigateTo('home', { replace: true });
   screenStack.length = 0;
 }
@@ -1670,6 +1718,21 @@ function closeLeaderboard() {
 // ═══════════════════════════════════════════════════════════════════════════
 // HISTORY
 // ═══════════════════════════════════════════════════════════════════════════
+/** Märket som visar att ett spel är ett bord i en turnering. */
+function tournamentBadgeHtml(game) {
+  if (!game.tournamentId) return '';
+  const tournament = TournamentStore.get(game.tournamentId);
+  if (!tournament) return '';
+  let where = '';
+  tournament.rounds.forEach(round => {
+    const index = round.tables.findIndex(t => t.gameId === game.id);
+    if (index >= 0) {
+      where = `${round.isFinal ? 'final' : `omg. ${round.number}`}, bord ${index + 1}`;
+    }
+  });
+  return `<span class="history-item__badge history-item__badge--tournament">🏆 ${escHtml(tournament.name)}${where ? ` · ${where}` : ''}</span>`;
+}
+
 function renderHistory() {
   const games = GameStore.getAll().slice().reverse();
   const list = $('#history-list');
@@ -1692,9 +1755,10 @@ function renderHistory() {
     const badge = g.status === 'active'
       ? '<span class="history-item__badge history-item__badge--active">Pågår</span>'
       : '<span class="history-item__badge history-item__badge--completed">Avslutad</span>';
+    const tournamentBadge = tournamentBadgeHtml(g);
 
     return `<div class="history-item" data-game="${g.id}">
-      <div class="history-item__date">${date} ${badge}</div>
+      <div class="history-item__date">${date} ${badge}${tournamentBadge}</div>
       <div class="history-item__players">${escHtml(playerNames)}</div>
       <div class="history-item__stats">
         <span>${g.rounds.length} omgångar</span>
@@ -1737,6 +1801,682 @@ function viewGame(gameId) {
   $('#view-protocol-foot').innerHTML = buildProtocolFoot(table, players);
 
   navigateTo('view-game');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOURNAMENTS
+// ═══════════════════════════════════════════════════════════════════════════
+// En turnering samlar deltagare och spelas i omgångar. Varje omgång delar upp
+// deltagarna på ett eller flera bord (4–7 spelare styck), och varje bord spelas
+// som ett vanligt protokoll. Tabellen är summan av Kille-poängen från alla bord.
+
+/** "1 bord" men "2 bord" — svensk pluralform för turneringens räkneord. */
+function plural(count, singular, pluralForm) {
+  return `${count} ${count === 1 ? singular : pluralForm}`;
+}
+
+/** Turneringen som visas just nu. */
+function currentTournament() {
+  return openTournamentId ? TournamentStore.get(openTournamentId) : null;
+}
+
+/** Namnet på en spelare (raderade spelare visas som okända). */
+function playerNameOf(id) {
+  return PlayerStore.get(id)?.name || 'Okänd spelare';
+}
+
+/** Turneringens tabell, med spelarnamn påhängda för visning och sortering. */
+function tournamentStandings(tournament) {
+  return computeStandings(tournament, GameStore.getAll())
+    .map(row => ({ ...row, name: playerNameOf(row.playerId) }));
+}
+
+const DRAW_METHOD_LABELS = {
+  random: 'Slump',
+  smart: 'Smart slump',
+  manual: 'Urval',
+  ranked: 'Final — topp i tabellen'
+};
+
+const DRAW_METHOD_HINTS = {
+  random: 'Deltagarna lottas fritt till borden.',
+  smart: 'Lottar så att de som mötts minst tidigare hamnar vid samma bord.',
+  manual: 'Tryck på en spelare i förhandsvisningen för att flytta den till nästa bord.',
+  ranked: 'De högst rankade i tabellen möts vid ett bord. Placeringen i finalen avgör turneringen.'
+};
+
+// ─── Turneringslista ──────────────────────────────────────────────────────────
+function renderTournaments() {
+  const tournaments = TournamentStore.getAll().slice().reverse();
+  const list = $('#tournament-list');
+  const empty = $('#tournaments-empty');
+
+  if (tournaments.length === 0) {
+    list.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+
+  list.innerHTML = tournaments.map(t => {
+    const date = new Date(t.createdAt).toLocaleDateString('sv-SE', {
+      year: 'numeric', month: 'short', day: 'numeric'
+    });
+    const badge = t.status === 'active'
+      ? '<span class="history-item__badge history-item__badge--active">Pågår</span>'
+      : '<span class="history-item__badge history-item__badge--completed">Avslutad</span>';
+    const result = t.status === 'completed' ? tournamentResult(t, GameStore.getAll()) : null;
+    const leader = result && result.winnerId
+      ? `🏆 ${escHtml(playerNameOf(result.winnerId))}`
+      : `${t.playerIds.length} deltagare`;
+    const tables = t.rounds.reduce((sum, r) => sum + r.tables.length, 0);
+
+    return `<div class="history-item" data-tournament="${t.id}">
+      <div class="history-item__date">${date} ${badge}</div>
+      <div class="history-item__players">${escHtml(t.name)}</div>
+      <div class="history-item__stats">
+        <span>${leader} · ${plural(t.rounds.length, 'omgång', 'omgångar')} · ${plural(tables, 'bord', 'bord')}</span>
+        <button class="history-item__delete" data-tournament-delete="${t.id}" aria-label="Ta bort turnering">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function deleteTournament(id) {
+  const tournament = TournamentStore.get(id);
+  if (!tournament) return;
+  showConfirm(`Ta bort ${tournament.name}? Spelen ligger kvar i historiken.`, () => {
+    TournamentStore.remove(id);
+    if (openTournamentId === id) openTournamentId = null;
+    renderTournaments();
+  });
+}
+
+// ─── Skapa turnering ──────────────────────────────────────────────────────────
+function openTournamentSetup() {
+  tournamentSetupSelection = new Set();
+  $('#input-tournament-name').value = '';
+  navigateTo('tournament-setup');
+}
+
+function renderTournamentSetup() {
+  const players = PlayerStore.getAll();
+  const grid = $('#tournament-setup-grid');
+
+  if (players.length === 0) {
+    grid.innerHTML = `<div class="empty-state"><div class="empty-state__text">Lägg till spelare ovan för att välja deltagare.</div></div>`;
+  } else {
+    grid.innerHTML = players.map(p => `
+      <div class="setup-player ${tournamentSetupSelection.has(p.id) ? 'selected' : ''}" data-id="${p.id}">
+        <div class="setup-player__avatar">${avatarInitial(p.name)}</div>
+        <div class="setup-player__name">${escHtml(p.name)}</div>
+      </div>
+    `).join('');
+  }
+
+  const count = tournamentSetupSelection.size;
+  $('#tournament-setup-count').textContent = `${count} deltagare valda`;
+  $('#btn-create-tournament').disabled = count < 2;
+}
+
+function toggleTournamentSetupPlayer(id) {
+  if (tournamentSetupSelection.has(id)) {
+    tournamentSetupSelection.delete(id);
+  } else {
+    tournamentSetupSelection.add(id);
+  }
+  renderTournamentSetup();
+}
+
+/** Lägg till en ny spelare direkt från turneringsuppsättningen. */
+function addTournamentSetupPlayer() {
+  const input = $('#input-tournament-player');
+  const name = input.value.trim();
+  if (!name) return;
+  const player = PlayerStore.add(name);
+  tournamentSetupSelection.add(player.id);
+  input.value = '';
+  input.focus();
+  renderTournamentSetup();
+}
+
+function createTournamentFromSetup() {
+  const name = $('#input-tournament-name').value.trim() ||
+    `Turnering ${new Date().toLocaleDateString('sv-SE')}`;
+  let tournament;
+  try {
+    tournament = createTournament(name, [...tournamentSetupSelection]);
+  } catch (err) {
+    showToast(err.message);
+    return;
+  }
+  TournamentStore.save(tournament);
+  Activity.track('feature_used', { feature: 'tournament_created', players: tournament.playerIds.length });
+  openTournamentId = tournament.id;
+  tournamentTab = 'rounds';
+  navigateTo('tournament', { replace: true });
+}
+
+// ─── Turneringsvy ─────────────────────────────────────────────────────────────
+function openTournament(id) {
+  const tournament = TournamentStore.get(id);
+  if (!tournament) return;
+  openTournamentId = id;
+  tournamentTab = tournament.rounds.length > 0 ? 'table' : 'rounds';
+  navigateTo('tournament');
+}
+
+const STANDINGS_COLUMNS = [
+  { key: 'rank', label: '#', title: 'Placering — klicka för grundsorteringen', align: 'center', defaultDir: 'asc',
+    value: r => r.rank, cls: 'lb-rank', cell: r => r.rank },
+  { key: 'name', label: 'Deltagare', title: 'Namn', align: 'left', defaultDir: 'asc',
+    value: r => r.name.toLowerCase(), cls: 'lb-name', cell: r => escHtml(r.name) },
+  { key: 'tables', label: 'Bord', title: 'Spelade bord', align: 'right', defaultDir: 'desc', group: true,
+    value: r => r.tables, cls: 'lb-count', cell: r => r.tables },
+  { key: 'tableWins', label: 'Vunna bord', title: 'Bord där deltagaren hade flest poäng', align: 'right', defaultDir: 'desc', wide: true,
+    value: r => r.tableWins, cls: 'lb-count lb-count--won', cell: r => r.tableWins },
+  { key: 'rounds', label: 'Omgångar', title: 'Spelade omgångar vid bordet', align: 'right', defaultDir: 'desc', group: true, wide: true,
+    value: r => r.rounds, cls: 'lb-count', cell: r => r.rounds },
+  { key: 'roundWins', label: 'Vunna omg.', title: 'Vunna omgångar vid bordet', align: 'right', defaultDir: 'desc', wide: true,
+    value: r => r.roundWins, cls: 'lb-count lb-count--won', cell: r => r.roundWins },
+  { key: 'points', label: 'Poäng', title: 'Summan av Kille-poängen från alla bord', align: 'right', defaultDir: 'desc', group: true,
+    value: r => r.points,
+    cls: r => `lb-score ${r.points > 0 ? 'positive' : r.points < 0 ? 'negative' : 'zero'}`,
+    cell: r => formatScore(r.points) }
+];
+
+function standingsHtml(tournament) {
+  const standings = tournamentStandings(tournament);
+  if (standings.length === 0) {
+    return '<div class="empty-state"><div class="empty-state__text">Inga deltagare ännu.</div></div>';
+  }
+  const rows = sortTableRows(STANDINGS_COLUMNS, standings, standingsSort);
+  const played = standings.some(r => r.tables > 0);
+  return `
+    ${sortableTableHtml(STANDINGS_COLUMNS, rows, standingsSort, r =>
+      `class="lb-row${r.rank === 1 && played ? ' lb-row--leader' : ''}"`)}
+    <p class="stats-section-note">
+      <strong>Poäng</strong> = summan av deltagarens slutställning från varje spelat bord — det är den
+      tabellen rankas efter. <strong>Bord</strong> = antal bord deltagaren spelat.<span class="lb-col--wide">
+      <strong>Vunna bord</strong> = bord där deltagaren hade flest poäng.</span>
+      Klicka på en rubrik för att sortera; <strong>#</strong> återställer grundsorteringen.
+    </p>`;
+}
+
+/** En kort statusrad för ett bord: pågår, klart eller inte påbörjat. */
+function tableStatusHtml(table) {
+  const game = table.gameId ? GameStore.get(table.gameId) : null;
+  if (!game) return '<span class="t-table__status">Spelet saknas</span>';
+  if (game.rounds.length === 0) {
+    return '<span class="t-table__status t-table__status--new">Inte påbörjat</span>';
+  }
+  const { totals } = calculateScoreTable(game);
+  const best = table.playerIds
+    .map(id => ({ id, score: totals[id] || 0 }))
+    .sort((a, b) => b.score - a.score)[0];
+  const lead = `${escHtml(playerNameOf(best.id))} ${formatScore(best.score)}`;
+  if (game.status === 'completed') {
+    return `<span class="t-table__status t-table__status--done">Klart · 🏆 ${lead}</span>`;
+  }
+  return `<span class="t-table__status t-table__status--live">Pågår · ${game.rounds.length} omg. · leder: ${lead}</span>`;
+}
+
+function roundsHtml(tournament) {
+  if (tournament.rounds.length === 0) {
+    return `<div class="empty-state">
+      <div class="empty-state__icon">🃏</div>
+      <div class="empty-state__text">Inga omgångar ännu. Tryck på <strong>Ny omgång</strong> för att lotta borden.</div>
+    </div>`;
+  }
+  return tournament.rounds.map(round => `
+    <div class="t-round">
+      <div class="t-round__head">
+        <span class="t-round__title">${round.isFinal ? '🏆 Final' : `Omgång ${round.number}`}</span>
+        <span class="t-round__meta">${escHtml(DRAW_METHOD_LABELS[round.method] || 'Urval')} · ${round.tables.length} bord</span>
+        ${tournament.status === 'active'
+          ? `<button class="t-round__delete" data-round-delete="${round.number}" aria-label="Ta bort omgång">✕</button>`
+          : ''}
+      </div>
+      <div class="t-tables">
+        ${round.tables.map((table, i) => `
+          <button class="t-table" data-open-table="${round.number}:${i}">
+            <span class="t-table__title">${round.isFinal ? 'Finalbord' : `Bord ${i + 1}`} · ${table.playerIds.length} spelare</span>
+            <span class="t-table__players">${table.playerIds.map(id => escHtml(playerNameOf(id))).join(', ')}</span>
+            ${tableStatusHtml(table)}
+          </button>`).join('')}
+      </div>
+    </div>`).join('');
+}
+
+function participantsHtml(tournament) {
+  // En avslutad turnering står stilla — deltagarlistan hör ihop med resultatet.
+  const editable = tournament.status === 'active';
+  const others = PlayerStore.getAll().filter(p => !tournament.playerIds.includes(p.id));
+  const list = `
+    <div class="panel${editable ? ' mb-lg' : ''}">
+      <h3 class="panel__title">Deltagare (${tournament.playerIds.length})</h3>
+      <ul class="player-list">
+        ${tournament.playerIds.map(id => `
+          <li class="player-item">
+            <div class="player-item__avatar">${avatarInitial(playerNameOf(id))}</div>
+            <span class="player-item__name">${escHtml(playerNameOf(id))}</span>
+            ${editable
+              ? `<button class="player-item__action" data-participant-remove="${id}" title="Ta bort">✕</button>`
+              : ''}
+          </li>`).join('')}
+      </ul>
+    </div>`;
+  if (!editable) return list;
+
+  return `${list}
+    <div class="panel">
+      <h3 class="panel__title">Lägg till spelare</h3>
+      <div class="input-group">
+        <input type="text" class="input" id="input-participant-name" placeholder="Ny spelare..." maxlength="20" autocomplete="off">
+        <button class="btn btn--primary" data-participant-create>Lägg till</button>
+      </div>
+      ${others.length
+        ? `<div class="tr-chips mt-md">${others.map(p =>
+            `<button class="tr-chip" data-participant-add="${p.id}">＋ ${escHtml(p.name)}</button>`).join('')}</div>`
+        : '<p class="field-hint mt-md">Alla spelare är redan med i turneringen.</p>'}
+    </div>`;
+}
+
+function renderTournament() {
+  const tournament = currentTournament();
+  if (!tournament) {
+    navigateTo('tournaments', { replace: true });
+    return;
+  }
+  $('#header-title').textContent = tournament.name;
+
+  const result = tournamentResult(tournament, GameStore.getAll());
+  const tables = tournament.rounds.reduce((sum, r) => sum + r.tables.length, 0);
+  const banner = tournament.status === 'completed' && result.winnerId
+    ? `<div class="t-banner">
+         <span class="t-banner__medal">🏆</span>
+         <span class="t-banner__body">
+           <strong>${escHtml(playerNameOf(result.winnerId))}</strong> vann turneringen
+           <span class="t-banner__note">Avgjord av ${result.decidedBy === 'final' ? 'finalen' : 'tabellen'}</span>
+         </span>
+       </div>`
+    : '';
+
+  const tabs = [
+    { key: 'table', label: 'Tabell' },
+    { key: 'rounds', label: 'Omgångar' },
+    { key: 'players', label: 'Deltagare' }
+  ];
+
+  let body;
+  if (tournamentTab === 'rounds') body = roundsHtml(tournament);
+  else if (tournamentTab === 'players') body = participantsHtml(tournament);
+  else body = standingsHtml(tournament);
+
+  $('#tournament-content').innerHTML = `
+    <div class="t-head">
+      <div class="t-head__meta">
+        ${plural(tournament.playerIds.length, 'deltagare', 'deltagare')} ·
+        ${plural(tournament.rounds.length, 'omgång', 'omgångar')} ·
+        ${plural(tables, 'bord', 'bord')}
+        ${tournament.status === 'completed' ? '· Avslutad' : ''}
+      </div>
+      ${banner}
+    </div>
+    <div class="stats-tabs">
+      ${tabs.map(t => `<button class="stats-tab${tournamentTab === t.key ? ' active' : ''}" data-ttab="${t.key}">${t.label}</button>`).join('')}
+    </div>
+    <div class="stats-panel active">${body}</div>`;
+
+  renderTournamentActions(tournament);
+}
+
+function renderTournamentActions(tournament) {
+  const actions = $('#tournament-actions');
+  if (tournament.status === 'completed') {
+    actions.innerHTML = `
+      <button class="btn btn--gold" data-tournament-action="result">🏆 Resultat</button>
+      <button class="btn btn--ghost btn--small" data-tournament-action="reopen">Återöppna</button>`;
+    return;
+  }
+  const final = getFinalRound(tournament);
+  const finalPlayed = final && final.tables.every(t => {
+    const game = t.gameId ? GameStore.get(t.gameId) : null;
+    return game && game.rounds.length > 0;
+  });
+  actions.innerHTML = `
+    <button class="btn btn--primary" data-tournament-action="round">⚜ Ny omgång</button>
+    <button class="btn ${finalPlayed ? 'btn--gold' : 'btn--secondary'} btn--small" data-tournament-action="end">Avsluta</button>`;
+}
+
+function switchTournamentTab(tab) {
+  tournamentTab = tab;
+  renderTournament();
+}
+
+/** Öppna ett bords protokoll — pågående bord spelas, avslutade visas. */
+function openTournamentTable(roundNumber, tableIndex) {
+  const tournament = currentTournament();
+  const round = tournament?.rounds.find(r => r.number === roundNumber);
+  const table = round?.tables[tableIndex];
+  if (!table) return;
+  const game = table.gameId ? GameStore.get(table.gameId) : null;
+  if (!game) {
+    showToast('Bordets protokoll hittades inte');
+    return;
+  }
+  if (game.status === 'active') {
+    activeGame = game;
+    GameStore.setActive(game.id);
+    navigateTo('game');
+  } else {
+    viewGame(game.id);
+  }
+}
+
+function deleteTournamentRound(roundNumber) {
+  const tournament = currentTournament();
+  const round = tournament?.rounds.find(r => r.number === roundNumber);
+  if (!round) return;
+  const label = round.isFinal ? 'finalen' : `omgång ${roundNumber}`;
+  showConfirm(`Ta bort ${label}? Bordens protokoll raderas.`, () => {
+    round.tables.forEach(t => { if (t.gameId) GameStore.remove(t.gameId); });
+    const updated = removeTournamentRound(tournament, roundNumber);
+    TournamentStore.save(updated);
+    renderTournament();
+  });
+}
+
+function endTournament() {
+  const tournament = currentTournament();
+  if (!tournament) return;
+  const unfinished = tournament.rounds
+    .flatMap(r => r.tables)
+    .filter(t => {
+      const game = t.gameId ? GameStore.get(t.gameId) : null;
+      return game && game.status === 'active';
+    });
+  const message = unfinished.length
+    ? `Avsluta turneringen? ${unfinished.length} bord är inte avslutade — deras poäng räknas som de står.`
+    : 'Avsluta turneringen?';
+  showConfirm(message, () => {
+    const updated = completeTournament(tournament);
+    TournamentStore.save(updated);
+    Activity.track('feature_used', { feature: 'tournament_completed', rounds: updated.rounds.length });
+    renderTournament();
+    showTournamentResult(updated);
+  });
+}
+
+function reopenCurrentTournament() {
+  const tournament = currentTournament();
+  if (!tournament) return;
+  const updated = reopenTournament(tournament);
+  TournamentStore.save(updated);
+  renderTournament();
+}
+
+function showTournamentResult(tournament) {
+  const result = tournamentResult(tournament, GameStore.getAll());
+  if (result.ranking.length === 0) return;
+  podiumReturn = { tournamentId: tournament.id };
+  // Varje siffra är den som avgjorde placeringen: finalens poäng för finalisterna,
+  // tabellens poäng för alla andra.
+  const finalists = result.ranking.filter(r => r.finalScore !== undefined).length;
+  showPodium(result.ranking.map(r => ({
+    name: playerNameOf(r.playerId),
+    score: r.finalScore !== undefined ? r.finalScore : r.points
+  })), {
+    title: 'Turneringens slutresultat',
+    note: result.decidedBy === 'final'
+      ? `Finalen avgjorde topp ${finalists} (poängen är finalens) — övriga står efter tabellen`
+      : 'Turneringen avgjordes av tabellen'
+  });
+}
+
+// ─── Deltagare i en pågående turnering ────────────────────────────────────────
+function addParticipant(playerId) {
+  const tournament = currentTournament();
+  if (!tournament || tournament.status !== 'active') return;
+  TournamentStore.save(addParticipants(tournament, [playerId]));
+  renderTournament();
+}
+
+function createParticipant() {
+  const input = $('#input-participant-name');
+  const name = input?.value.trim();
+  if (!name) return;
+  const player = PlayerStore.add(name);
+  addParticipant(player.id);
+}
+
+function removeTournamentParticipant(playerId) {
+  const tournament = currentTournament();
+  if (!tournament || tournament.status !== 'active') return;
+  try {
+    TournamentStore.save(removeParticipant(tournament, playerId));
+  } catch (err) {
+    showToast(err.message);
+    return;
+  }
+  renderTournament();
+}
+
+// ─── Ny omgång (lottningsdialogen) ────────────────────────────────────────────
+function openTournamentRoundModal() {
+  const tournament = currentTournament();
+  if (!tournament || tournament.status !== 'active') return;
+  if (tournament.playerIds.length < 2) {
+    showToast('Turneringen behöver minst 2 deltagare');
+    return;
+  }
+  trState = {
+    method: tournament.rounds.length > 0 ? 'smart' : 'random',
+    selected: new Set(tournament.playerIds),
+    tableCount: tableCountFor(tournament.playerIds.length),
+    finalCount: Math.min(MAX_TABLE_SIZE, tournament.playerIds.length),
+    tables: []
+  };
+  redrawTournamentTables();
+  $('#modal-tournament-round').classList.add('active');
+  renderTournamentRoundModal();
+}
+
+function closeTournamentRoundModal(skipAnimation = false) {
+  const overlay = $('#modal-tournament-round');
+  if (skipAnimation) {
+    overlay.classList.remove('active');
+    trState = null;
+    return;
+  }
+  overlay.classList.add('closing');
+  setTimeout(() => {
+    overlay.classList.remove('active', 'closing');
+    trState = null;
+  }, 250);
+}
+
+/** Lotta om borden utifrån valt läge, antal bord och valda deltagare. */
+function redrawTournamentTables() {
+  const tournament = currentTournament();
+  if (!tournament || !trState) return;
+
+  if (trState.method === 'ranked') {
+    const standings = tournamentStandings(tournament);
+    const max = Math.min(MAX_GAME_SIZE, standings.length);
+    trState.finalCount = Math.min(Math.max(trState.finalCount, MIN_GAME_SIZE), max);
+    const ids = qualifiers(standings, trState.finalCount);
+    trState.tables = ids.length >= MIN_GAME_SIZE ? [ids] : [];
+    return;
+  }
+
+  const ids = tournament.playerIds.filter(id => trState.selected.has(id));
+  if (ids.length < MIN_GAME_SIZE) {
+    trState.tables = [];
+    return;
+  }
+  const range = tableCountRange(ids.length);
+  trState.tableCount = Math.min(Math.max(trState.tableCount, range.min), range.max);
+  trState.tables = trState.method === 'manual'
+    ? splitInOrder(ids, trState.tableCount)
+    : drawTables(tournament, ids, { method: trState.method, tableCount: trState.tableCount });
+}
+
+/** Varför omgången inte kan startas, eller null när allt är i sin ordning. */
+function tournamentRoundProblem() {
+  if (!trState || trState.tables.length === 0) {
+    return trState && trState.method === 'ranked'
+      ? 'Det behövs minst 2 rankade deltagare för en final.'
+      : 'Välj minst 2 deltagare.';
+  }
+  const bad = trState.tables.findIndex(ids => ids.length < MIN_GAME_SIZE || ids.length > MAX_GAME_SIZE);
+  if (bad >= 0) return `Bord ${bad + 1} måste ha ${MIN_GAME_SIZE}–${MAX_GAME_SIZE} spelare.`;
+  return null;
+}
+
+function renderTournamentRoundModal() {
+  const tournament = currentTournament();
+  if (!tournament || !trState) return;
+  const isFinal = trState.method === 'ranked';
+  const standings = isFinal ? tournamentStandings(tournament) : null;
+  const rankOf = standings ? new Map(standings.map(r => [r.playerId, r])) : null;
+
+  $('#tr-modal-title').textContent = isFinal ? 'Final' : `Omgång ${tournament.rounds.length + 1}`;
+  $$('#tr-methods .draw-method').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.method === trState.method);
+    // Finalen kräver en tabell att ranka efter.
+    btn.disabled = btn.dataset.method === 'ranked' && tournament.rounds.length === 0;
+  });
+
+  $('#tr-participants-section').style.display = isFinal ? 'none' : '';
+  $('#tr-final-section').style.display = isFinal ? '' : 'none';
+  $('#tr-tables-section').style.display = isFinal ? 'none' : '';
+
+  $('#tr-participants').innerHTML = tournament.playerIds.map(id => `
+    <button class="tr-chip${trState.selected.has(id) ? ' tr-chip--on' : ''}" data-participant="${id}">
+      ${escHtml(playerNameOf(id))}
+    </button>`).join('');
+  $('#tr-participants-count').textContent = `${trState.selected.size} av ${tournament.playerIds.length} spelar`;
+  $('#tr-table-count').textContent = String(trState.tables.length || trState.tableCount);
+  $('#tr-final-count').textContent = String(trState.finalCount);
+
+  const problem = tournamentRoundProblem();
+  const preview = trState.tables.map((ids, i) => `
+    <div class="tr-table">
+      <div class="tr-table__head">
+        <span>${isFinal ? '🏆 Finalbord' : `Bord ${i + 1}`}</span>
+        <span class="tr-table__count">${ids.length} spelare</span>
+      </div>
+      <div class="tr-chips">
+        ${ids.map(id => {
+          const row = rankOf?.get(id);
+          const suffix = row ? `<span class="tr-chip__badge">${row.rank}. ${formatScore(row.points)}</span>` : '';
+          const movable = trState.method === 'manual';
+          return `<button class="tr-chip tr-chip--seat${movable ? ' tr-chip--movable' : ''}"
+                    ${movable ? `data-move="${id}"` : 'disabled'}>
+            ${escHtml(playerNameOf(id))}${suffix}
+          </button>`;
+        }).join('')}
+      </div>
+    </div>`).join('');
+
+  $('#tr-preview').innerHTML = preview || '<p class="field-hint">Inga bord att visa.</p>';
+  $('#btn-tr-confirm').disabled = Boolean(problem);
+  $('#btn-tr-confirm').textContent = isFinal ? 'Starta finalen' : 'Starta omgången';
+  const hint = $('#tr-method-hint');
+  hint.textContent = problem || DRAW_METHOD_HINTS[trState.method] || '';
+  hint.classList.toggle('field-hint--warning', Boolean(problem));
+}
+
+function setDrawMethod(method) {
+  if (!trState) return;
+  trState.method = method;
+  redrawTournamentTables();
+  renderTournamentRoundModal();
+}
+
+function toggleRoundParticipant(playerId) {
+  if (!trState) return;
+  if (trState.selected.has(playerId)) trState.selected.delete(playerId);
+  else trState.selected.add(playerId);
+  trState.tableCount = trState.selected.size >= MIN_GAME_SIZE
+    ? tableCountFor(trState.selected.size)
+    : 1;
+  redrawTournamentTables();
+  renderTournamentRoundModal();
+}
+
+function setAllRoundParticipants(on) {
+  const tournament = currentTournament();
+  if (!trState || !tournament) return;
+  trState.selected = on ? new Set(tournament.playerIds) : new Set();
+  trState.tableCount = on ? tableCountFor(tournament.playerIds.length) : 1;
+  redrawTournamentTables();
+  renderTournamentRoundModal();
+}
+
+function changeTableCount(delta) {
+  if (!trState) return;
+  const range = tableCountRange(trState.selected.size);
+  const current = trState.tables.length || trState.tableCount;
+  const next = Math.min(Math.max(current + delta, range.min), range.max);
+  trState.tableCount = next;
+  redrawTournamentTables();
+  renderTournamentRoundModal();
+}
+
+function changeFinalCount(delta) {
+  if (!trState) return;
+  trState.finalCount += delta;
+  redrawTournamentTables();
+  renderTournamentRoundModal();
+}
+
+/** Flytta en spelare till nästa bord (urvalsläget). */
+function moveToNextTable(playerId) {
+  if (!trState || trState.tables.length < 2) return;
+  const from = trState.tables.findIndex(ids => ids.includes(playerId));
+  if (from < 0) return;
+  const to = (from + 1) % trState.tables.length;
+  trState.tables[from] = trState.tables[from].filter(id => id !== playerId);
+  trState.tables[to] = [...trState.tables[to], playerId];
+  renderTournamentRoundModal();
+}
+
+function confirmTournamentRound() {
+  const tournament = currentTournament();
+  if (!tournament || !trState || tournamentRoundProblem()) return;
+  const isFinal = trState.method === 'ranked';
+
+  let updated;
+  try {
+    updated = addTournamentRound(tournament, {
+      tables: trState.tables.map(ids => ({ playerIds: ids })),
+      method: trState.method,
+      isFinal
+    });
+  } catch (err) {
+    showToast(err.message);
+    return;
+  }
+
+  // Varje bord får ett eget protokoll, märkt med turneringen så att historiken
+  // kan visa var spelet hör hemma.
+  const round = updated.rounds[updated.rounds.length - 1];
+  round.tables.forEach(table => {
+    const game = { ...createGame(table.playerIds), tournamentId: tournament.id };
+    GameStore.save(game);
+    table.gameId = game.id;
+  });
+
+  TournamentStore.save(updated);
+  Activity.track('feature_used', {
+    feature: 'tournament_round', method: trState.method, tables: round.tables.length, final: isFinal
+  });
+  closeTournamentRoundModal();
+  tournamentTab = 'rounds';
+  renderTournament();
+  showToast(isFinal ? 'Finalen är lottad' : `Omgång ${round.number} är lottad`);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2456,13 +3196,16 @@ function handleImport() {
 async function handleImportFile(file) {
   if (!file) return;
   try {
-    const { playersAdded, gamesAdded } = await importFile(file);
+    const { playersAdded, gamesAdded, tournamentsAdded } = await importFile(file);
     // Invalidate store caches so the app reads fresh data
     PlayerStore.invalidate();
     GameStore.invalidate();
+    TournamentStore.invalidate();
     activeGame = GameStore.getActive();
     renderHome();
-    showToast(`Importerat: ${gamesAdded} spel, ${playersAdded} nya spelare`);
+    const parts = [`${gamesAdded} spel`, `${playersAdded} nya spelare`];
+    if (tournamentsAdded) parts.push(`${tournamentsAdded} turneringar`);
+    showToast(`Importerat: ${parts.join(', ')}`);
   } catch (err) {
     showToast(`Import misslyckades: ${err.message}`);
   }
@@ -2648,6 +3391,107 @@ function bindEvents() {
     }
   });
 
+  // Tournaments
+  $('#btn-tournaments').addEventListener('click', () => navigateTo('tournaments'));
+  $('#btn-new-tournament').addEventListener('click', openTournamentSetup);
+  $('#tournament-list').addEventListener('click', (e) => {
+    const deleteBtn = e.target.closest('[data-tournament-delete]');
+    if (deleteBtn) {
+      deleteTournament(deleteBtn.dataset.tournamentDelete);
+      return;
+    }
+    const item = e.target.closest('[data-tournament]');
+    if (item) openTournament(item.dataset.tournament);
+  });
+
+  // Ny turnering
+  $('#tournament-setup-grid').addEventListener('click', (e) => {
+    const el = e.target.closest('.setup-player');
+    if (el) toggleTournamentSetupPlayer(el.dataset.id);
+  });
+  $('#btn-tournament-add-player').addEventListener('click', addTournamentSetupPlayer);
+  $('#input-tournament-player').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') addTournamentSetupPlayer();
+  });
+  $('#btn-create-tournament').addEventListener('click', createTournamentFromSetup);
+
+  // Turneringsvyn — innehållet ritas om i sin helhet, så klick fångas här.
+  $('#tournament-content').addEventListener('click', (e) => {
+    const tab = e.target.closest('[data-ttab]');
+    if (tab) { switchTournamentTab(tab.dataset.ttab); return; }
+
+    const sortBtn = e.target.closest('[data-sort]');
+    if (sortBtn) {
+      standingsSort = nextSortState(STANDINGS_COLUMNS, standingsSort, sortBtn.dataset.sort);
+      renderTournament();
+      return;
+    }
+
+    const tableBtn = e.target.closest('[data-open-table]');
+    if (tableBtn) {
+      const [round, index] = tableBtn.dataset.openTable.split(':');
+      openTournamentTable(Number(round), Number(index));
+      return;
+    }
+
+    const roundDelete = e.target.closest('[data-round-delete]');
+    if (roundDelete) { deleteTournamentRound(Number(roundDelete.dataset.roundDelete)); return; }
+
+    const addBtn = e.target.closest('[data-participant-add]');
+    if (addBtn) { addParticipant(addBtn.dataset.participantAdd); return; }
+
+    const removeBtn = e.target.closest('[data-participant-remove]');
+    if (removeBtn) { removeTournamentParticipant(removeBtn.dataset.participantRemove); return; }
+
+    if (e.target.closest('[data-participant-create]')) createParticipant();
+  });
+  $('#tournament-content').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.id === 'input-participant-name') createParticipant();
+  });
+  $('#tournament-actions').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-tournament-action]');
+    if (!btn) return;
+    switch (btn.dataset.tournamentAction) {
+      case 'round': openTournamentRoundModal(); break;
+      case 'end': endTournament(); break;
+      case 'reopen': reopenCurrentTournament(); break;
+      case 'result': showTournamentResult(currentTournament()); break;
+    }
+  });
+
+  // Lottningsdialogen
+  $('#tr-methods').addEventListener('click', (e) => {
+    const btn = e.target.closest('.draw-method');
+    if (btn && !btn.disabled) setDrawMethod(btn.dataset.method);
+  });
+  $('#tr-participants').addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-participant]');
+    if (chip) toggleRoundParticipant(chip.dataset.participant);
+  });
+  $('#btn-tr-all').addEventListener('click', () => setAllRoundParticipants(true));
+  $('#btn-tr-none').addEventListener('click', () => setAllRoundParticipants(false));
+  $('#tr-tables-section').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-tables-delta]');
+    if (btn) changeTableCount(Number(btn.dataset.tablesDelta));
+  });
+  $('#tr-final-section').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-final-delta]');
+    if (btn) changeFinalCount(Number(btn.dataset.finalDelta));
+  });
+  $('#btn-tr-redraw').addEventListener('click', () => {
+    redrawTournamentTables();
+    renderTournamentRoundModal();
+  });
+  $('#tr-preview').addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-move]');
+    if (chip) moveToNextTable(chip.dataset.move);
+  });
+  $('#btn-tr-cancel').addEventListener('click', () => closeTournamentRoundModal());
+  $('#btn-tr-confirm').addEventListener('click', confirmTournamentRound);
+  $('#modal-tournament-round').addEventListener('click', (e) => {
+    if (e.target === $('#modal-tournament-round')) closeTournamentRoundModal();
+  });
+
   // History
   $('#history-list').addEventListener('click', (e) => {
     const deleteBtn = e.target.closest('.history-item__delete');
@@ -2660,7 +3504,8 @@ function bindEvents() {
   });
 
   // Swipe to dismiss bottom sheets
-  addSwipeToDismiss($('.modal'), closeRoundModal);
+  addSwipeToDismiss($('#modal-round .modal'), closeRoundModal);
+  addSwipeToDismiss($('#modal-tournament-round .modal'), closeTournamentRoundModal);
   addSwipeToDismiss($('.card-picker'), closeCardPicker);
 
   bindGroupEvents();

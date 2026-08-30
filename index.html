@@ -123,6 +123,10 @@
             <img src="assets/icons/players.png?v=4" alt="" class="action-card__img">
             <span class="action-card__title">Hantera Spelare</span>
           </button>
+          <button class="action-card action-card--wide" id="btn-tournaments">
+            <img src="assets/icons/tournament.png?v=1" alt="" class="action-card__img action-card__img--inline">
+            <span class="action-card__title">Turnering</span>
+          </button>
           <button class="action-card action-card--wide" id="btn-card-values">
             <span class="action-card__emoji" aria-hidden="true">⚜</span>
             <span class="action-card__title">Kortvärden</span>
@@ -211,6 +215,42 @@
           </table>
         </div>
       </div>
+    </section>
+
+    <!-- ── Tournaments (list) ── -->
+    <section class="screen app-content" id="screen-tournaments">
+      <button class="btn btn--gold btn--full mb-lg" id="btn-new-tournament">⚜ Ny turnering</button>
+      <div class="tournament-list" id="tournament-list"></div>
+      <div class="empty-state" id="tournaments-empty" style="display:none">
+        <div class="empty-state__icon">🏆</div>
+        <div class="empty-state__text">Inga turneringar ännu.<br>Skapa en turnering, lägg till deltagare och spela omgångar.</div>
+      </div>
+    </section>
+
+    <!-- ── Tournament setup (create) ── -->
+    <section class="screen app-content" id="screen-tournament-setup">
+      <div class="panel mb-lg">
+        <h3 class="panel__title">Turneringens namn</h3>
+        <input type="text" class="input input--block" id="input-tournament-name" placeholder="T.ex. Julturneringen" maxlength="40" autocomplete="off">
+      </div>
+      <div class="panel">
+        <h3 class="panel__title">Deltagare</h3>
+        <div class="input-group">
+          <input type="text" class="input" id="input-tournament-player" placeholder="Lägg till ny spelare..." maxlength="20" autocomplete="off">
+          <button class="btn btn--primary" id="btn-tournament-add-player">Lägg till</button>
+        </div>
+        <div class="setup-grid" id="tournament-setup-grid"></div>
+        <div class="setup-count" id="tournament-setup-count">0 deltagare valda</div>
+      </div>
+      <button class="btn btn--primary btn--full mt-lg" id="btn-create-tournament" disabled>Skapa turnering</button>
+    </section>
+
+    <!-- ── Tournament (detail) ── -->
+    <section class="screen" id="screen-tournament">
+      <div class="app-content game-content-padded">
+        <div id="tournament-content"></div>
+      </div>
+      <div class="game-actions" id="tournament-actions"></div>
     </section>
 
     <!-- ── Statistics ── -->
@@ -477,6 +517,70 @@
     </div>
   </div>
 
+  <!-- ══════ Tournament Round Modal ══════ -->
+  <div class="modal-overlay" id="modal-tournament-round">
+    <div class="modal">
+      <div class="modal__handle"></div>
+      <h2 class="modal__title" id="tr-modal-title">Ny omgång</h2>
+
+      <!-- Step 1: draw method -->
+      <div class="modal__section">
+        <div class="modal__section-title">Hur sätts borden ihop?</div>
+        <div class="draw-methods" id="tr-methods">
+          <button class="draw-method" data-method="random">🎲 Slump</button>
+          <button class="draw-method" data-method="smart">🧠 Smart slump</button>
+          <button class="draw-method" data-method="manual">✋ Urval</button>
+          <button class="draw-method" data-method="ranked">🏆 Final</button>
+        </div>
+        <p class="field-hint" id="tr-method-hint"></p>
+      </div>
+
+      <!-- Step 2a: participants (all methods but the final) -->
+      <div class="modal__section" id="tr-participants-section">
+        <div class="modal__section-title">Vilka spelar omgången?</div>
+        <div class="tr-chips" id="tr-participants"></div>
+        <div class="tr-inline-actions">
+          <button class="btn btn--ghost btn--small" id="btn-tr-all">Alla</button>
+          <button class="btn btn--ghost btn--small" id="btn-tr-none">Ingen</button>
+          <span class="tr-count" id="tr-participants-count"></span>
+        </div>
+      </div>
+
+      <!-- Step 2b: number of finalists (final only) -->
+      <div class="modal__section" id="tr-final-section" style="display:none">
+        <div class="modal__section-title">Antal finalister</div>
+        <div class="stepper">
+          <button class="stepper__btn" data-final-delta="-1" aria-label="Färre finalister">−</button>
+          <span class="stepper__value" id="tr-final-count">4</span>
+          <button class="stepper__btn" data-final-delta="1" aria-label="Fler finalister">＋</button>
+        </div>
+        <p class="field-hint">Finalen spelas vid ett bord med 2–8 spelare.</p>
+      </div>
+
+      <!-- Step 3: number of tables -->
+      <div class="modal__section" id="tr-tables-section">
+        <div class="modal__section-title">Antal bord</div>
+        <div class="stepper">
+          <button class="stepper__btn" data-tables-delta="-1" aria-label="Färre bord">−</button>
+          <span class="stepper__value" id="tr-table-count">1</span>
+          <button class="stepper__btn" data-tables-delta="1" aria-label="Fler bord">＋</button>
+          <button class="btn btn--ghost btn--small" id="btn-tr-redraw">↻ Blanda om</button>
+        </div>
+      </div>
+
+      <!-- Preview -->
+      <div class="modal__section">
+        <div class="modal__section-title">Bord</div>
+        <div class="tr-preview" id="tr-preview"></div>
+      </div>
+
+      <div class="flex-row mt-lg" style="justify-content: center; gap: 0.5rem;">
+        <button class="btn btn--ghost" id="btn-tr-cancel">Avbryt</button>
+        <button class="btn btn--primary" id="btn-tr-confirm" disabled>Starta omgång</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ══════ Card Picker Overlay ══════ -->
   <div class="card-picker-overlay" id="card-picker-overlay">
     <div class="card-picker">
@@ -506,7 +610,8 @@
   <!-- ══════ Game End Leaderboard ══════ -->
   <div class="leaderboard-overlay" id="leaderboard-overlay">
     <div class="leaderboard-content">
-      <h2 class="leaderboard-title">Slutresultat</h2>
+      <h2 class="leaderboard-title" id="leaderboard-title">Slutresultat</h2>
+      <p class="leaderboard-note" id="leaderboard-note" style="display:none"></p>
       <div class="podium" id="podium"></div>
       <div class="leaderboard-rest" id="leaderboard-rest"></div>
       <button class="btn btn--primary btn--full mt-lg" id="btn-leaderboard-close">Stäng</button>

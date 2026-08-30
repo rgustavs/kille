@@ -8,6 +8,10 @@ Designed to be resilient, it works fully offline via a Progressive Web App (PWA)
 
 - **Groups & shared central database**: On first launch you choose whether to **log in to a group** (shared roster, protocols and statistics via a central Supabase database) or **work locally** (everything stays on the device). Group members share a common game database in real time, and a **group admin** manages the group.
 - **2-8 Player Matches**: Manage player rosters with avatars and multi-game persistence.
+- **Tournaments**: Run a tournament over several rounds, each splitting the participants across
+  parallel tables of 4–7 players. Draw the tables at random, with a *smart* draw that avoids
+  repeat meetings, or by hand. The tournament table sums the Kille scores from every table, and
+  the tournament is decided either by that table or by a final between the top-ranked players.
 - **Automated Score Logic**: Handles Kille's unique zero-sum "pot" distribution, assigning the pot value to the winner and subtracting exact card values from losing players.
 - **Stand-by (Vilande) Mechanics**: Players can sit out during specific rounds, automatically registering a zero score for that round.
 - **Offline Capable**: Fully functional without network connectivity. Load it once and keep it on your home screen forever.
@@ -19,6 +23,7 @@ Designed to be resilient, it works fully offline via a Progressive Web App (PWA)
 - **Markup**: HTML5
 - **Styling**: Vanilla CSS3 (Custom Properties, Grid/Flexbox)
 - **Persistance**: `localStorage` (local mode) + **Supabase / PostgreSQL** (group mode)
+- **Tests**: Node's built-in `assert` — `npm test`
 - **Offline Capabilities**: Service Worker API & Web App Manifest (group mode stays usable offline via a local cache + outgoing sync queue)
 
 ## Prerequisites
@@ -73,6 +78,7 @@ The project relies on clean separation of concerns without relying on bulky fron
 ├── js/
 │   ├── app.js          # Global app controller: Navigation, UI updates, DOM events
 │   ├── game.js         # State engine and scoring algorithms
+│   ├── tournament.js   # Tournament domain: draws, tables, standings, result
 │   └── cards.js        # Kille card dictionary (points, names, types)
 ├── index.html          # Application UI shell
 ├── manifest.json       # PWA Manifest
@@ -92,6 +98,43 @@ Follows a simple `navigateTo(screenId)` SPA pattern. Instead of a virtual DOM, i
 
 **4. PWA Pipeline (`sw.js` & `manifest.json`)**  
 Employs a "stale-while-revalidate" offline strategy. On installation, all UI core files (including card images) are precached. During subsequent loads, requests are served immediately from the Service Worker cache while a fresh copy is fetched in the background and stored for next time, allowing instant, offline boot-ups that still pick up updates.
+
+## Tournaments
+
+A tournament ("turnering") groups a set of participants and is played over several
+**rounds**. Each round splits the players who take part into one or more **tables** of
+4–7 players, and every table is played as an ordinary Kille protocol — so tournament
+games show up in the normal history and statistics, tagged with the tournament they
+belong to.
+
+**Creating a round.** When a round is drawn you choose who plays and how the tables are
+put together:
+
+| Method | What it does |
+| --- | --- |
+| **Slump** | Draws the participants freely across the tables. |
+| **Smart slump** | Draws so that players who have met the least end up at the same table (and, when only some participants play, prefers those with the fewest tables so far). |
+| **Urval** | You place the players yourself — tap a player in the preview to move them to the next table. |
+| **Final** | Seeds a single table with the top *N* of the standings; *N* is chosen when the final is drawn. |
+
+The number of tables is suggested automatically (the fewest tables that keep every table
+within 4–7 players) and can be adjusted by hand; a table always holds 2–8 players, the
+range a Kille game allows.
+
+**The table.** The standings sum each participant's final score from every table they
+have played, and that sum is what the tournament is ranked by. Tables played, tables won,
+rounds played and rounds won are shown alongside it, and every column is sortable.
+
+**The result.** A tournament played without a final is decided by the standings. Draw a
+final and the placement in that final decides instead — the finalists are ranked by their
+final score, everyone else follows in table order. Closing the tournament shows the
+podium and states which of the two decided it.
+
+Tournaments are stored like games: in `localStorage` in local mode, and in the shared
+`kille_group_tournaments` table (via `kille_save_tournament` / `kille_delete_tournament`)
+in group mode. They are included in export/import files as well. To enable tournaments on
+an existing group database, re-run [`supabase/schema.sql`](supabase/schema.sql) — it is
+idempotent and adds the table and functions in place.
 
 ## Groups & Central Database (Supabase)
 
@@ -188,6 +231,7 @@ column and functions in place.
 | `js/router.js` | Reads the group slug / admin flag from the URL and builds shareable group URLs |
 | `js/remote.js` | Group login/admin + super-admin operations + an offline-tolerant outgoing sync queue (`Outbox`) |
 | `js/store.js` | Namespaced persistence: local keys vs. per-group keys, enqueuing changes to the central DB in group mode |
+| `js/tournament.js` | Tournament domain logic: draws, table splits, standings and result (no DOM, no storage) |
 
 ## Deployment
 

@@ -222,6 +222,10 @@ function sendOp(op) {
       return rpc('kille_save_game', { ...base, p_game: op.game, ...who });
     case 'deleteGame':
       return rpc('kille_delete_game', { ...base, p_id: op.id, ...who });
+    case 'saveTournament':
+      return rpc('kille_save_tournament', { ...base, p_tournament: op.tournament, ...who });
+    case 'deleteTournament':
+      return rpc('kille_delete_tournament', { ...base, p_id: op.id, ...who });
     default:
       return Promise.resolve();
   }
@@ -240,9 +244,9 @@ export const Outbox = {
   enqueue(op) {
     if (!Session.isGroup()) return;
     const ops = readOutbox();
-    if (op.type === 'savePlayer' || op.type === 'saveGame') {
-      const entId = op.id || op.game?.id;
-      const idx = ops.findIndex(o => o.type === op.type && (o.id || o.game?.id) === entId);
+    if (op.type === 'savePlayer' || op.type === 'saveGame' || op.type === 'saveTournament') {
+      const entId = op.id || op.game?.id || op.tournament?.id;
+      const idx = ops.findIndex(o => o.type === op.type && (o.id || o.game?.id || o.tournament?.id) === entId);
       if (idx >= 0) ops.splice(idx, 1);
     }
     ops.push(op);

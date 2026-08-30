@@ -1,5 +1,5 @@
 /**
- * Kille Infrastructure — Persistens för spelare och spel.
+ * Kille Infrastructure — Persistens för spelare, spel och turneringar.
  *
  * Lagret är läges-medvetet:
  *  - Lokalt läge: allt sparas i localStorage på enheten (som tidigare).
@@ -18,6 +18,7 @@ import { Outbox } from './remote.js';
 const LOCAL_KEYS = {
   players: 'kille_players',
   games: 'kille_games',
+  tournaments: 'kille_tournaments',
   active: 'kille_active_game_id'
 };
 
@@ -186,12 +187,69 @@ export const GameStore = {
   }
 };
 
+// ─── Tournament Store ───────────────────────────────────────────────────────
+export const TournamentStore = {
+  _cache: null,
+  _cacheKey: null,
+
+  /** Drop the in-memory cache so the next read reloads from localStorage. */
+  invalidate() {
+    this._cache = null;
+    this._cacheKey = null;
+  },
+
+  getAll() {
+    const key = keyFor('tournaments');
+    if (!this._cache || this._cacheKey !== key) {
+      this._cache = readJsonArray(key);
+      this._cacheKey = key;
+    }
+    return this._cache;
+  },
+
+  _save() {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(keyFor('tournaments'), JSON.stringify(this._cache));
+    }
+  },
+
+  get(id) {
+    return this.getAll().find(t => t.id === id) || null;
+  },
+
+  save(tournament) {
+    const tournaments = this.getAll();
+    const idx = tournaments.findIndex(t => t.id === tournament.id);
+    if (idx >= 0) {
+      tournaments[idx] = tournament;
+    } else {
+      tournaments.push(tournament);
+    }
+    this._save();
+    if (inGroup()) Outbox.enqueue({ type: 'saveTournament', tournament, ...actor() });
+  },
+
+  remove(id) {
+    this._cache = this.getAll().filter(t => t.id !== id);
+    this._save();
+    if (inGroup()) Outbox.enqueue({ type: 'deleteTournament', id, ...actor() });
+  },
+
+  /** Turneringen som ett visst spel tillhör, om något. */
+  forGame(gameId) {
+    if (!gameId) return null;
+    return this.getAll().find(t =>
+      Array.isArray(t.rounds) && t.rounds.some(r => r.tables.some(tb => tb.gameId === gameId))
+    ) || null;
+  }
+};
+
 // ─── Grupp-hydrering ──────────────────────────────────────────────────────────
 /**
  * Skriv en snapshot (retur från join/pull) till den aktuella gruppens lokala
  * kopia och släng cacherna så att appen läser färsk data. Servern är
- * källan till sanning för spelare/spel; eventuella lokalt köade ändringar ligger
- * kvar i outboxen och skickas separat.
+ * källan till sanning för spelare, spel och turneringar; eventuella lokalt köade
+ * ändringar ligger kvar i outboxen och skickas separat.
  */
 export const GroupData = {
   hydrate(snapshot) {
@@ -201,11 +259,14 @@ export const GroupData = {
       ? snapshot.players.map(p => ({ id: p.id, name: p.name, createdAt: p.createdAt }))
       : [];
     const games = Array.isArray(snapshot.games) ? snapshot.games : [];
+    const tournaments = Array.isArray(snapshot.tournaments) ? snapshot.tournaments : [];
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(`kille_g_${gid}_players`, JSON.stringify(players));
       localStorage.setItem(`kille_g_${gid}_games`, JSON.stringify(games));
+      localStorage.setItem(`kille_g_${gid}_tournaments`, JSON.stringify(tournaments));
     }
     PlayerStore.invalidate();
     GameStore.invalidate();
+    TournamentStore.invalidate();
   }
 };

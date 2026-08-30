@@ -5,7 +5,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "node tests/game.test.js && node tests/stats.test.js && node tests/groups.test.js && node tests/activity.test.js"
+    "test": "node tests/game.test.js && node tests/tournament.test.js && node tests/stats.test.js && node tests/groups.test.js && node tests/activity.test.js"
   },
   "devDependencies": {
     "sharp": "^0.35.3"

@@ -3490,3 +3490,314 @@ body {
   font-size: 0.75rem;
   color: var(--text-muted);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Tournaments
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Turneringskortet på startsidan visar ikonen liggande, som en emoji-knapp. */
+.action-card__img--inline {
+  width: 56px;
+  max-width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+}
+
+.input--block {
+  width: 100%;
+}
+
+.history-item__badge--tournament {
+  background: var(--gold-100);
+  color: #6b5410;
+  border: 1px solid var(--gold-300);
+}
+
+/* ─── Turneringsvyn ───────────────────────────────────────────────────────── */
+.t-head {
+  margin-bottom: var(--space-lg);
+}
+
+.t-head__meta {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.t-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-top: var(--space-md);
+  padding: var(--space-md);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--gold-100), var(--cream-50));
+  border: 1px solid var(--gold-300);
+  box-shadow: var(--shadow-sm);
+}
+
+.t-banner__medal {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.t-banner__body {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.95rem;
+}
+
+.t-banner__note {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+/* ─── Omgångar & bord ────────────────────────────────────────────────────── */
+.t-round {
+  background: var(--cream-50);
+  border: 1px solid var(--cream-300);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+.t-round__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.t-round__title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--green-700);
+}
+
+.t-round__meta {
+  flex: 1;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.t-round__delete {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: var(--radius-sm);
+}
+.t-round__delete:hover {
+  color: var(--red-500);
+}
+
+.t-tables {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.t-table {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: var(--space-sm) var(--space-md);
+  border: 2px solid var(--cream-300);
+  border-radius: var(--radius-md);
+  background: var(--cream-100);
+  cursor: pointer;
+  font-family: var(--font-body);
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+  touch-action: manipulation;
+}
+.t-table:hover {
+  border-color: var(--green-300);
+  background: var(--green-100);
+}
+
+.t-table__title {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--green-700);
+}
+
+.t-table__players {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.t-table__status {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.t-table__status--live {
+  color: var(--green-600);
+  font-weight: 600;
+}
+.t-table__status--done {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+/* ─── Lottningsdialogen ──────────────────────────────────────────────────── */
+.draw-methods {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-sm);
+}
+
+.draw-method {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: var(--space-sm);
+  min-height: 44px;
+  border: 2px solid var(--cream-300);
+  border-radius: var(--radius-md);
+  background: var(--cream-50);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  touch-action: manipulation;
+}
+.draw-method:hover:not(:disabled) {
+  border-color: var(--green-300);
+}
+.draw-method.active {
+  border-color: var(--green-500);
+  background: linear-gradient(135deg, var(--green-100), rgba(37, 112, 66, 0.08));
+  color: var(--green-800);
+}
+.draw-method:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.field-hint--warning {
+  color: var(--red-500);
+  font-weight: 600;
+}
+
+.tr-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.tr-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-md);
+  min-height: 40px;
+  border: 2px solid var(--cream-300);
+  border-radius: var(--radius-xl);
+  background: var(--cream-50);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  touch-action: manipulation;
+}
+.tr-chip--on {
+  border-color: var(--green-500);
+  background: var(--green-100);
+  color: var(--green-800);
+  font-weight: 600;
+}
+.tr-chip--seat:disabled {
+  opacity: 1;
+  cursor: default;
+}
+.tr-chip--movable {
+  border-style: dashed;
+  border-color: var(--green-400);
+}
+
+.tr-chip__badge {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.tr-inline-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}
+
+.tr-count {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.stepper__btn {
+  width: 44px;
+  height: 44px;
+  border: 2px solid var(--cream-300);
+  border-radius: var(--radius-md);
+  background: var(--cream-50);
+  color: var(--green-700);
+  font-size: 1.2rem;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.stepper__btn:hover {
+  border-color: var(--green-300);
+}
+
+.stepper__value {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--green-800);
+  min-width: 2ch;
+  text-align: center;
+}
+
+.tr-table {
+  border: 1px solid var(--cream-300);
+  border-radius: var(--radius-md);
+  background: var(--cream-100);
+  padding: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+
+.tr-table__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--green-700);
+  margin-bottom: var(--space-xs);
+}
+
+.tr-table__count {
+  font-weight: 500;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+/* Podiets underrubrik (hur turneringen avgjordes). */
+.leaderboard-note {
+  margin-top: calc(var(--space-lg) * -1 + var(--space-xs));
+  margin-bottom: var(--space-lg);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
