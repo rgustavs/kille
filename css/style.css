@@ -2642,29 +2642,21 @@ body {
   text-align: center;
 }
 
-.action-card--wide {
-  grid-column: 1 / -1;
-  flex-direction: row;
-  gap: var(--space-md);
-}
-
 .action-card__emoji {
-  width: 56px;
-  height: 56px;
+  width: 100%;
+  max-width: 120px;
+  aspect-ratio: 1/1;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 2rem;
+  font-size: 2.5rem;
   color: var(--gold-500);
   background: var(--green-800);
-  border-radius: var(--radius-md);
-  flex-shrink: 0;
-}
-
-.action-card--wide .action-card__img {
-  width: 56px;
-  max-width: 56px;
-  flex-shrink: 0;
+  border-radius: 8px;
+  border: 2px solid var(--cream-300);
+  box-shadow:
+    0 0 0 4px var(--cream-100),
+    0 0 0 6px var(--cream-400);
 }
 
 /* ─── Card Values Screen ──────────────────────────────────────────────────── */
