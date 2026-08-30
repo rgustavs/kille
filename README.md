@@ -136,6 +136,11 @@ the tables, in table order. The last round only takes over once the deciding tab
 been played; a table left unplayed keeps its seeded order. Closing the tournament shows the
 podium and states which of the two decided it.
 
+**In-app help.** The tournament list links to *Så funkar turneringar*
+(`#screen-tournament-help`), a help screen that walks through the whole flow in Swedish —
+creating a tournament, drawing rounds, reading the standings, the deciding table and the
+final result — illustrated with screenshots of the real UI in [`assets/help/`](assets/help).
+
 Tournaments are stored like games: in `localStorage` in local mode, and in the shared
 `kille_group_tournaments` table (via `kille_save_tournament` / `kille_delete_tournament`)
 in group mode. They are included in export/import files as well. To enable tournaments on
