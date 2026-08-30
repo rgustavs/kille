@@ -8,8 +8,9 @@
  *    turneringen via spelets id,
  *  - turneringstabellen är summan av spelarnas slutställningar från alla bord,
  *  - turneringen avgörs antingen av tabellen eller av en avslutande rankad
- *    omgång där alla deltagare spelar: de topprankade vid finalbordet, nästa
- *    grupp vid bord 2 och så vidare. Finalbordets placering avgör turneringen.
+ *    omgång: de topprankade möts vid finalbordet, och övriga spelar antingen
+ *    vidare på egna bord i tabellordning eller står över. Finalbordets
+ *    placering avgör turneringen.
  */
 import { calculateScoreTable } from './game.js';
 import { uid } from './util.js';
@@ -381,18 +382,21 @@ export function qualifiers(standings, count) {
  * Borden i en rankad slutomgång. Alla deltagare är med: de topprankade möts vid
  * finalbordet (bord 1), nästa grupp vid bord 2 och så vidare, så att bordet man
  * hamnar vid speglar tabellplaceringen.
+ * Övriga kan antingen spela vidare på egna bord (`includeRest`, standard) eller
+ * stå över — då placeras de efter tabellen i slutresultatet.
  * @param {object[]} standings - Tabellen, bäst först (se computeStandings)
  * @param {number} topCount - Antal spelare vid finalbordet
  * @returns {string[][]} Borden i rankad ordning
  */
 export function rankedTables(standings, topCount, options = {}) {
-  const { min = MIN_TABLE_SIZE, max = MAX_TABLE_SIZE } = options;
+  const { min = MIN_TABLE_SIZE, max = MAX_TABLE_SIZE, includeRest = true } = options;
   if (!Array.isArray(standings) || standings.length < MIN_GAME_SIZE) return [];
   const top = Math.min(
     Math.max(Number(topCount) || max, MIN_GAME_SIZE),
     Math.min(MAX_GAME_SIZE, standings.length)
   );
   const tables = [qualifiers(standings, top)];
+  if (!includeRest) return tables;
   const rest = standings.slice(top).map(row => row.playerId);
 
   if (rest.length >= MIN_GAME_SIZE) {

@@ -1842,7 +1842,7 @@ const DRAW_METHOD_HINTS = {
   random: 'Deltagarna lottas fritt till borden.',
   smart: 'Lottar så att de som mötts minst tidigare hamnar vid samma bord.',
   manual: 'Tryck på en spelare i förhandsvisningen för att flytta den till nästa bord.',
-  ranked: 'Alla spelar, rankade efter tabellen: de bästa vid finalbordet, nästa grupp vid bord 2. Finalbordet avgör turneringen.'
+  ranked: 'Deltagarna rankas efter tabellen: de bästa vid finalbordet, övriga vid bord 2 och neråt om de spelar med. Finalbordet avgör turneringen.'
 };
 
 // ─── Turneringslista ──────────────────────────────────────────────────────────
@@ -2274,6 +2274,7 @@ function openTournamentRoundModal() {
     selected: new Set(tournament.playerIds),
     tableCount: tableCountFor(tournament.playerIds.length),
     finalCount: Math.min(MAX_TABLE_SIZE, tournament.playerIds.length),
+    includeRest: true, // spelar övriga en sista omgång, eller bara finalbordet?
     tables: []
   };
   redrawTournamentTables();
@@ -2304,7 +2305,7 @@ function redrawTournamentTables() {
     const standings = tournamentStandings(tournament);
     const max = Math.min(MAX_GAME_SIZE, standings.length);
     trState.finalCount = Math.min(Math.max(trState.finalCount, MIN_GAME_SIZE), max);
-    trState.tables = rankedTables(standings, trState.finalCount);
+    trState.tables = rankedTables(standings, trState.finalCount, { includeRest: trState.includeRest });
     return;
   }
 
@@ -2348,9 +2349,20 @@ function renderTournamentRoundModal() {
     btn.disabled = btn.dataset.method === 'ranked' && tournament.rounds.length === 0;
   });
 
+  // Hur många står utanför finalbordet? Bara då är frågan om en sista omgång
+  // för övriga relevant.
+  const outsideFinal = isFinal ? Math.max(0, standings.length - trState.finalCount) : 0;
   $('#tr-participants-section').style.display = isFinal ? 'none' : '';
   $('#tr-final-section').style.display = isFinal ? '' : 'none';
+  $('#tr-rest-section').style.display = isFinal && outsideFinal > 0 ? '' : 'none';
   $('#tr-tables-section').style.display = isFinal ? 'none' : '';
+
+  $$('#tr-rest-choice .draw-method').forEach(btn => {
+    btn.classList.toggle('active', (btn.dataset.rest === '1') === trState.includeRest);
+  });
+  $('#tr-rest-hint').textContent = trState.includeRest
+    ? `${plural(outsideFinal, 'deltagare', 'deltagare')} fördelas på bord 2 och neråt i tabellordning.`
+    : `${plural(outsideFinal, 'deltagare', 'deltagare')} står över och placeras efter tabellen.`;
 
   $('#tr-participants').innerHTML = tournament.playerIds.map(id => `
     <button class="tr-chip${trState.selected.has(id) ? ' tr-chip--on' : ''}" data-participant="${id}">
@@ -2421,6 +2433,13 @@ function changeTableCount(delta) {
   const current = trState.tables.length || trState.tableCount;
   const next = Math.min(Math.max(current + delta, range.min), range.max);
   trState.tableCount = next;
+  redrawTournamentTables();
+  renderTournamentRoundModal();
+}
+
+function setFinalRest(includeRest) {
+  if (!trState) return;
+  trState.includeRest = includeRest;
   redrawTournamentTables();
   renderTournamentRoundModal();
 }
@@ -3477,6 +3496,10 @@ function bindEvents() {
   $('#tr-final-section').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-final-delta]');
     if (btn) changeFinalCount(Number(btn.dataset.finalDelta));
+  });
+  $('#tr-rest-choice').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-rest]');
+    if (btn) setFinalRest(btn.dataset.rest === '1');
   });
   $('#btn-tr-redraw').addEventListener('click', () => {
     redrawTournamentTables();

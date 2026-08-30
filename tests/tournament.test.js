@@ -307,6 +307,10 @@ function runTests() {
 
     // Färre deltagare än finalbordet rymmer blir ett enda bord.
     assert.deepStrictEqual(rankedTables(nine.slice(0, 4), 6), [['q1', 'q2', 'q3', 'q4']]);
+
+    // Spelar övriga inte med blir finalbordet det enda bordet.
+    assert.deepStrictEqual(rankedTables(standings, 5, { includeRest: false }),
+      [['p1', 'p2', 'p3', 'p4', 'p5']]);
     console.log('✅ rankedTables passes');
   } catch (err) {
     failures++;
@@ -389,6 +393,32 @@ function runTests() {
   } catch (err) {
     failures++;
     console.error('❌ tournamentResult by ranked last round failed', err);
+  }
+
+  // Test: only the deciding table plays — the rest are placed by the standings
+  try {
+    const ids = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6'];
+    let t = createTournament('T', ids);
+    const g1 = { ...playedGame(ids, 'p1', ['num_1', 'num_2', 'num_3', 'num_4', 'num_5']), id: 'g1' };
+    t = addTournamentRound(t, { tables: [{ gameId: 'g1', playerIds: ids }] });
+    const standings = computeStandings(t, [g1]);
+    const tables = rankedTables(standings, 2, { includeRest: false });
+    assert.deepStrictEqual(tables.length, 1);
+    // p2 vinner finalbordet mot ettan i tabellen.
+    const f1 = { ...playedGame(tables[0], tables[0][1], ['num_1']), id: 'f1' };
+    t = addTournamentRound(t, { isFinal: true, method: 'ranked', tables: [{ gameId: 'f1', playerIds: tables[0] }] });
+
+    const result = tournamentResult(t, [g1, f1]);
+    assert.strictEqual(result.decidedBy, 'final');
+    assert.strictEqual(result.winnerId, tables[0][1]);
+    assert.strictEqual(result.ranking.length, 6);
+    // Övriga fyra följer i tabellordning efter finalbordets två.
+    assert.deepStrictEqual(result.ranking.slice(2).map(r => r.playerId),
+      standings.filter(r => !tables[0].includes(r.playerId)).map(r => r.playerId));
+    console.log('✅ tournamentResult with the deciding table alone passes');
+  } catch (err) {
+    failures++;
+    console.error('❌ tournamentResult with the deciding table alone failed', err);
   }
 
   // Test: a lower table played but the deciding table not — the table still decides

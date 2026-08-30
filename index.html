@@ -554,7 +554,17 @@
           <span class="stepper__value" id="tr-final-count">4</span>
           <button class="stepper__btn" data-final-delta="1" aria-label="Fler vid finalbordet">＋</button>
         </div>
-        <p class="field-hint">Övriga deltagare fördelas på bord 2 och neråt i tabellordning.</p>
+        <p class="field-hint">De högst rankade i tabellen möts vid finalbordet, som avgör turneringen.</p>
+      </div>
+
+      <!-- Step 2c: do the remaining players play too? -->
+      <div class="modal__section" id="tr-rest-section" style="display:none">
+        <div class="modal__section-title">Ska övriga spela en sista omgång?</div>
+        <div class="draw-methods" id="tr-rest-choice">
+          <button class="draw-method" data-rest="1">Ja, alla spelar</button>
+          <button class="draw-method" data-rest="0">Nej, bara finalbordet</button>
+        </div>
+        <p class="field-hint" id="tr-rest-hint"></p>
       </div>
 
       <!-- Step 3: number of tables -->
