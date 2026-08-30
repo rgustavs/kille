@@ -7,8 +7,9 @@
  *  - varje bord spelas som ett vanligt Kille-spel (protokoll) och kopplas till
  *    turneringen via spelets id,
  *  - turneringstabellen är summan av spelarnas slutställningar från alla bord,
- *  - turneringen avgörs antingen av tabellen eller av placeringen i en final
- *    mellan de topp-N-rankade deltagarna.
+ *  - turneringen avgörs antingen av tabellen eller av en avslutande rankad
+ *    omgång där alla deltagare spelar: de topprankade vid finalbordet, nästa
+ *    grupp vid bord 2 och så vidare. Finalbordets placering avgör turneringen.
  */
 import { calculateScoreTable } from './game.js';
 import { uid } from './util.js';
@@ -83,9 +84,6 @@ export function addTournamentRound(tournament, roundData) {
   const { tables = [], method = 'manual', isFinal = false } = roundData || {};
   if (!Array.isArray(tables) || tables.length === 0) {
     throw new Error('Omgången behöver minst ett bord');
-  }
-  if (isFinal && tables.length !== 1) {
-    throw new Error('Finalen spelas vid ett bord');
   }
   const participants = new Set(tournament.playerIds);
   const seen = new Set();
@@ -380,26 +378,68 @@ export function qualifiers(standings, count) {
 }
 
 /**
+ * Borden i en rankad slutomgång. Alla deltagare är med: de topprankade möts vid
+ * finalbordet (bord 1), nästa grupp vid bord 2 och så vidare, så att bordet man
+ * hamnar vid speglar tabellplaceringen.
+ * @param {object[]} standings - Tabellen, bäst först (se computeStandings)
+ * @param {number} topCount - Antal spelare vid finalbordet
+ * @returns {string[][]} Borden i rankad ordning
+ */
+export function rankedTables(standings, topCount, options = {}) {
+  const { min = MIN_TABLE_SIZE, max = MAX_TABLE_SIZE } = options;
+  if (!Array.isArray(standings) || standings.length < MIN_GAME_SIZE) return [];
+  const top = Math.min(
+    Math.max(Number(topCount) || max, MIN_GAME_SIZE),
+    Math.min(MAX_GAME_SIZE, standings.length)
+  );
+  const tables = [qualifiers(standings, top)];
+  const rest = standings.slice(top).map(row => row.playerId);
+
+  if (rest.length >= MIN_GAME_SIZE) {
+    tables.push(...chunk(rest, tableSizes(rest.length, tableCountFor(rest.length, min, max))));
+  } else if (rest.length === 1) {
+    // En ensam spelare kan inte utgöra ett bord: låt hen sitta med vid
+    // finalbordet, eller — om det redan är fullt — bilda ett bord med den sist
+    // rankade därifrån.
+    if (tables[0].length < MAX_GAME_SIZE) tables[0].push(rest[0]);
+    else tables.push([tables[0].pop(), rest[0]]);
+  }
+  return tables;
+}
+
+/**
  * Turneringens slutresultat.
  * Har turneringen en finalomgång avgör placeringen i finalen; annars tabellen.
  * @returns {object} { decidedBy, winnerId, ranking: [{ playerId, place, ... }] }
  */
 export function tournamentResult(tournament, games) {
   const standings = computeStandings(tournament, games);
-  const final = getFinalRound(tournament);
-  const finalTable = final ? final.tables[0] : null;
-  const finalGame = finalTable && finalTable.gameId
-    ? (games || []).find(g => g.id === finalTable.gameId)
-    : null;
-  const finalPlayed = finalGame ? calculateScoreTable(finalGame) : null;
+  const byId = new Map(standings.map(row => [row.playerId, row]));
+  const scoreTableFor = table => {
+    const game = table.gameId ? (games || []).find(g => g.id === table.gameId) : null;
+    const played = game ? calculateScoreTable(game) : null;
+    return played && played.rounds.length > 0 ? played : null;
+  };
 
-  if (finalPlayed && finalPlayed.rounds.length > 0) {
-    const byId = new Map(standings.map(row => [row.playerId, row]));
-    const finalists = [...finalTable.playerIds]
-      .map(id => ({ ...(byId.get(id) || { playerId: id, points: 0 }), finalScore: finalPlayed.totals[id] || 0 }))
-      .sort((a, b) => b.finalScore - a.finalScore || b.points - a.points);
-    const rest = standings.filter(row => !finalTable.playerIds.includes(row.playerId));
-    const ranking = [...finalists, ...rest].map((row, i) => ({ ...row, place: i + 1 }));
+  const final = getFinalRound(tournament);
+  // Finalbordet avgör turneringen — är det inte spelat står tabellen kvar.
+  const decided = final ? scoreTableFor(final.tables[0]) : null;
+
+  if (decided) {
+    const seated = new Set();
+    const ranked = [];
+    final.tables.forEach(table => {
+      const played = scoreTableFor(table);
+      const rows = table.playerIds.map(id => {
+        const row = byId.get(id) || { playerId: id, points: 0 };
+        return played ? { ...row, finalScore: played.totals[id] || 0 } : { ...row };
+      });
+      // Spelade bord ordnas av sitt resultat; ospelade behåller sin seedning.
+      if (played) rows.sort((a, b) => b.finalScore - a.finalScore || b.points - a.points);
+      rows.forEach(row => { seated.add(row.playerId); ranked.push(row); });
+    });
+    const rest = standings.filter(row => !seated.has(row.playerId));
+    const ranking = [...ranked, ...rest].map((row, i) => ({ ...row, place: i + 1 }));
     return { decidedBy: 'final', winnerId: ranking[0]?.playerId || null, ranking, standings };
   }
 

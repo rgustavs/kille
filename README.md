@@ -11,7 +11,8 @@ Designed to be resilient, it works fully offline via a Progressive Web App (PWA)
 - **Tournaments**: Run a tournament over several rounds, each splitting the participants across
   parallel tables of 4–7 players. Draw the tables at random, with a *smart* draw that avoids
   repeat meetings, or by hand. The tournament table sums the Kille scores from every table, and
-  the tournament is decided either by that table or by a final between the top-ranked players.
+  the tournament is decided either by that table or by a ranked last round where everyone plays,
+  seeded by table position — the winner of the top table wins the tournament.
 - **Automated Score Logic**: Handles Kille's unique zero-sum "pot" distribution, assigning the pot value to the winner and subtracting exact card values from losing players.
 - **Stand-by (Vilande) Mechanics**: Players can sit out during specific rounds, automatically registering a zero score for that round.
 - **Offline Capable**: Fully functional without network connectivity. Load it once and keep it on your home screen forever.
@@ -115,7 +116,7 @@ put together:
 | **Slump** | Draws the participants freely across the tables. |
 | **Smart slump** | Draws so that players who have met the least end up at the same table (and, when only some participants play, prefers those with the fewest tables so far). |
 | **Urval** | You place the players yourself — tap a player in the preview to move them to the next table. |
-| **Final** | Seeds a single table with the top *N* of the standings; *N* is chosen when the final is drawn. |
+| **Slutomgång** | Seeds every participant by table position: the top *N* meet at the deciding table ("finalbordet"), the next group at table 2, and so on. *N* is chosen when the round is drawn. |
 
 The number of tables is suggested automatically (the fewest tables that keep every table
 within 4–7 players) and can be adjusted by hand; a table always holds 2–8 players, the
@@ -125,10 +126,12 @@ range a Kille game allows.
 have played, and that sum is what the tournament is ranked by. Tables played, tables won,
 rounds played and rounds won are shown alongside it, and every column is sortable.
 
-**The result.** A tournament played without a final is decided by the standings. Draw a
-final and the placement in that final decides instead — the finalists are ranked by their
-final score, everyone else follows in table order. Closing the tournament shows the
-podium and states which of the two decided it.
+**The result.** A tournament played without a last round is decided by the standings. Draw a
+ranked last round and the placement in it decides instead: the players at the deciding table
+rank first (ordered by that table's result), then table 2's players, and so on — so winning
+table 2 places you below everyone at the deciding table. The last round only takes over once
+the deciding table has actually been played; a table left unplayed keeps its seeded order.
+Closing the tournament shows the podium and states which of the two decided it.
 
 Tournaments are stored like games: in `localStorage` in local mode, and in the shared
 `kille_group_tournaments` table (via `kille_save_tournament` / `kille_delete_tournament`)

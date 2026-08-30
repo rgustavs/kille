@@ -15,6 +15,7 @@ import {
   playedCounts,
   computeStandings,
   qualifiers,
+  rankedTables,
   tournamentResult,
   getFinalRound,
   tournamentGameIds,
@@ -198,10 +199,12 @@ function runTests() {
     assert.throws(() => addTournamentRound(t, {
       tables: [{ playerIds: ['p1', 'p2'] }, { playerIds: ['p2', 'p3'] }]
     }), /ett bord per omgång/);
-    assert.throws(() => addTournamentRound(t, {
+    // En slutomgång får ha flera bord — alla deltagare är med.
+    const withFinal = addTournamentRound(t, {
       isFinal: true,
       tables: [{ playerIds: ['p1', 'p2'] }, { playerIds: ['p3', 'p4'] }]
-    }), /Finalen/);
+    });
+    assert.strictEqual(withFinal.rounds[0].tables.length, 2);
     console.log('✅ addTournamentRound validation passes');
   } catch (err) {
     failures++;
@@ -280,6 +283,36 @@ function runTests() {
     console.error('❌ qualifiers failed', err);
   }
 
+  // Test: rankedTables seeds every participant by table position
+  try {
+    const standings = Array.from({ length: 15 }, (_, i) => ({ playerId: `p${i + 1}`, rank: i + 1 }));
+    const tables = rankedTables(standings, 5);
+    assert.deepStrictEqual(tables[0], ['p1', 'p2', 'p3', 'p4', 'p5']);
+    assert.strictEqual(tables.flat().length, 15);
+    assert.strictEqual(new Set(tables.flat()).size, 15);
+    assert.ok(tables.every(t => t.length >= MIN_TABLE_SIZE && t.length <= MAX_TABLE_SIZE));
+    // Borden följer tabellordningen: bord 2 tar nästa grupp.
+    assert.strictEqual(tables[1][0], 'p6');
+
+    // En ensam kvarvarande spelare sätter sig vid finalbordet i stället för att
+    // bli ett bord för sig.
+    const nine = Array.from({ length: 9 }, (_, i) => ({ playerId: `q${i + 1}`, rank: i + 1 }));
+    const odd = rankedTables(nine, 5);
+    assert.strictEqual(odd.length, 2);
+    assert.deepStrictEqual(odd.map(t => t.length), [5, 4]);
+
+    // Ett fullsatt finalbord med en ensam spelare kvar delar med sig neråt.
+    const nineFull = rankedTables(nine, 8);
+    assert.deepStrictEqual(nineFull.map(t => t.length), [7, 2]);
+
+    // Färre deltagare än finalbordet rymmer blir ett enda bord.
+    assert.deepStrictEqual(rankedTables(nine.slice(0, 4), 6), [['q1', 'q2', 'q3', 'q4']]);
+    console.log('✅ rankedTables passes');
+  } catch (err) {
+    failures++;
+    console.error('❌ rankedTables failed', err);
+  }
+
   // Test: without a final the table decides
   try {
     let t = createTournament('T', ['p1', 'p2', 'p3']);
@@ -315,6 +348,72 @@ function runTests() {
   } catch (err) {
     failures++;
     console.error('❌ tournamentResult by final failed', err);
+  }
+
+  // Test: a ranked last round with several tables ranks table by table
+  try {
+    const ids = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8'];
+    let t = createTournament('T', ids);
+    // Grundomgång så att tabellen finns.
+    const g1 = { ...playedGame(ids.slice(0, 4), 'p1', ['num_1', 'num_1', 'num_1']), id: 'g1' };
+    const g2 = { ...playedGame(ids.slice(4), 'p5', ['num_1', 'num_1', 'num_1']), id: 'g2' };
+    t = addTournamentRound(t, {
+      tables: [
+        { gameId: 'g1', playerIds: ids.slice(0, 4) },
+        { gameId: 'g2', playerIds: ids.slice(4) }
+      ]
+    });
+    // Slutomgång: finalbordet (p1–p4) och bord 2 (p5–p8).
+    const f1 = { ...playedGame(['p1', 'p2', 'p3', 'p4'], 'p3', ['num_1', 'num_2', 'num_3']), id: 'f1' };
+    const f2 = { ...playedGame(['p5', 'p6', 'p7', 'p8'], 'p8', ['num_1', 'num_2', 'num_3']), id: 'f2' };
+    t = addTournamentRound(t, {
+      isFinal: true,
+      method: 'ranked',
+      tables: [
+        { gameId: 'f1', playerIds: ['p1', 'p2', 'p3', 'p4'] },
+        { gameId: 'f2', playerIds: ['p5', 'p6', 'p7', 'p8'] }
+      ]
+    });
+
+    const result = tournamentResult(t, [g1, g2, f1, f2]);
+    assert.strictEqual(result.decidedBy, 'final');
+    // Finalbordets vinnare vinner turneringen.
+    assert.strictEqual(result.winnerId, 'p3');
+    // Alla åtta är rankade, och finalbordet ligger före bord 2.
+    assert.strictEqual(result.ranking.length, 8);
+    assert.deepStrictEqual(result.ranking.slice(0, 4).map(r => r.playerId).sort(),
+      ['p1', 'p2', 'p3', 'p4']);
+    assert.strictEqual(result.ranking[4].playerId, 'p8');
+    assert.deepStrictEqual(result.ranking.map(r => r.place), [1, 2, 3, 4, 5, 6, 7, 8]);
+    console.log('✅ tournamentResult by ranked last round passes');
+  } catch (err) {
+    failures++;
+    console.error('❌ tournamentResult by ranked last round failed', err);
+  }
+
+  // Test: a lower table played but the deciding table not — the table still decides
+  try {
+    const ids = ['p1', 'p2', 'p3', 'p4'];
+    let t = createTournament('T', ids);
+    const g1 = { ...playedGame(ids, 'p1', ['num_12', 'num_12', 'num_12']), id: 'g1' };
+    t = addTournamentRound(t, { tables: [{ gameId: 'g1', playerIds: ids }] });
+    const f1 = { ...createGame(['p1', 'p2']), id: 'f1' };
+    const f2 = { ...playedGame(['p3', 'p4'], 'p4', ['num_1']), id: 'f2' };
+    t = addTournamentRound(t, {
+      isFinal: true,
+      method: 'ranked',
+      tables: [
+        { gameId: 'f1', playerIds: ['p1', 'p2'] },
+        { gameId: 'f2', playerIds: ['p3', 'p4'] }
+      ]
+    });
+    const result = tournamentResult(t, [g1, f1, f2]);
+    assert.strictEqual(result.decidedBy, 'table');
+    assert.strictEqual(result.winnerId, 'p1');
+    console.log('✅ tournamentResult waits for the deciding table');
+  } catch (err) {
+    failures++;
+    console.error('❌ tournamentResult deciding table failed', err);
   }
 
   // Test: an unplayed final falls back to the table

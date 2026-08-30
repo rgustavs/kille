@@ -14,7 +14,7 @@ import {
 } from './stats.js';
 import {
   createTournament, addTournamentRound, removeTournamentRound, completeTournament,
-  reopenTournament, addParticipants, removeParticipant, computeStandings, qualifiers,
+  reopenTournament, addParticipants, removeParticipant, computeStandings, rankedTables,
   tournamentResult, getFinalRound, drawTables, splitInOrder, tableCountFor, tableCountRange,
   MIN_GAME_SIZE, MAX_GAME_SIZE, MAX_TABLE_SIZE
 } from './tournament.js';
@@ -1727,7 +1727,7 @@ function tournamentBadgeHtml(game) {
   tournament.rounds.forEach(round => {
     const index = round.tables.findIndex(t => t.gameId === game.id);
     if (index >= 0) {
-      where = `${round.isFinal ? 'final' : `omg. ${round.number}`}, bord ${index + 1}`;
+      where = `${round.isFinal ? 'slutomg.' : `omg. ${round.number}`}, ${round.isFinal && index === 0 ? 'finalbord' : `bord ${index + 1}`}`;
     }
   });
   return `<span class="history-item__badge history-item__badge--tournament">🏆 ${escHtml(tournament.name)}${where ? ` · ${where}` : ''}</span>`;
@@ -1835,14 +1835,14 @@ const DRAW_METHOD_LABELS = {
   random: 'Slump',
   smart: 'Smart slump',
   manual: 'Urval',
-  ranked: 'Final — topp i tabellen'
+  ranked: 'Rankade bord'
 };
 
 const DRAW_METHOD_HINTS = {
   random: 'Deltagarna lottas fritt till borden.',
   smart: 'Lottar så att de som mötts minst tidigare hamnar vid samma bord.',
   manual: 'Tryck på en spelare i förhandsvisningen för att flytta den till nästa bord.',
-  ranked: 'De högst rankade i tabellen möts vid ett bord. Placeringen i finalen avgör turneringen.'
+  ranked: 'Alla spelar, rankade efter tabellen: de bästa vid finalbordet, nästa grupp vid bord 2. Finalbordet avgör turneringen.'
 };
 
 // ─── Turneringslista ──────────────────────────────────────────────────────────
@@ -2031,7 +2031,7 @@ function roundsHtml(tournament) {
   return tournament.rounds.map(round => `
     <div class="t-round">
       <div class="t-round__head">
-        <span class="t-round__title">${round.isFinal ? '🏆 Final' : `Omgång ${round.number}`}</span>
+        <span class="t-round__title">${round.isFinal ? `🏆 Slutomgång ${round.number}` : `Omgång ${round.number}`}</span>
         <span class="t-round__meta">${escHtml(DRAW_METHOD_LABELS[round.method] || 'Urval')} · ${round.tables.length} bord</span>
         ${tournament.status === 'active'
           ? `<button class="t-round__delete" data-round-delete="${round.number}" aria-label="Ta bort omgång">✕</button>`
@@ -2040,7 +2040,7 @@ function roundsHtml(tournament) {
       <div class="t-tables">
         ${round.tables.map((table, i) => `
           <button class="t-table" data-open-table="${round.number}:${i}">
-            <span class="t-table__title">${round.isFinal ? 'Finalbord' : `Bord ${i + 1}`} · ${table.playerIds.length} spelare</span>
+            <span class="t-table__title">${round.isFinal && i === 0 ? '🏆 Finalbord' : `Bord ${i + 1}`} · ${table.playerIds.length} spelare</span>
             <span class="t-table__players">${table.playerIds.map(id => escHtml(playerNameOf(id))).join(', ')}</span>
             ${tableStatusHtml(table)}
           </button>`).join('')}
@@ -2097,7 +2097,7 @@ function renderTournament() {
          <span class="t-banner__medal">🏆</span>
          <span class="t-banner__body">
            <strong>${escHtml(playerNameOf(result.winnerId))}</strong> vann turneringen
-           <span class="t-banner__note">Avgjord av ${result.decidedBy === 'final' ? 'finalen' : 'tabellen'}</span>
+           <span class="t-banner__note">Avgjord av ${result.decidedBy === 'final' ? 'finalbordet' : 'tabellen'}</span>
          </span>
        </div>`
     : '';
@@ -2178,7 +2178,7 @@ function deleteTournamentRound(roundNumber) {
   const tournament = currentTournament();
   const round = tournament?.rounds.find(r => r.number === roundNumber);
   if (!round) return;
-  const label = round.isFinal ? 'finalen' : `omgång ${roundNumber}`;
+  const label = round.isFinal ? `slutomgång ${roundNumber}` : `omgång ${roundNumber}`;
   showConfirm(`Ta bort ${label}? Bordens protokoll raderas.`, () => {
     round.tables.forEach(t => { if (t.gameId) GameStore.remove(t.gameId); });
     const updated = removeTournamentRound(tournament, roundNumber);
@@ -2220,16 +2220,15 @@ function showTournamentResult(tournament) {
   const result = tournamentResult(tournament, GameStore.getAll());
   if (result.ranking.length === 0) return;
   podiumReturn = { tournamentId: tournament.id };
-  // Varje siffra är den som avgjorde placeringen: finalens poäng för finalisterna,
-  // tabellens poäng för alla andra.
-  const finalists = result.ranking.filter(r => r.finalScore !== undefined).length;
+  // Varje siffra är den som avgjorde placeringen: slutomgångens poäng för dem som
+  // spelade den, tabellens poäng för alla andra.
   showPodium(result.ranking.map(r => ({
     name: playerNameOf(r.playerId),
     score: r.finalScore !== undefined ? r.finalScore : r.points
   })), {
     title: 'Turneringens slutresultat',
     note: result.decidedBy === 'final'
-      ? `Finalen avgjorde topp ${finalists} (poängen är finalens) — övriga står efter tabellen`
+      ? 'Slutomgången avgjorde — finalbordet först, sedan bord 2 och neråt'
       : 'Turneringen avgjordes av tabellen'
   });
 }
@@ -2305,8 +2304,7 @@ function redrawTournamentTables() {
     const standings = tournamentStandings(tournament);
     const max = Math.min(MAX_GAME_SIZE, standings.length);
     trState.finalCount = Math.min(Math.max(trState.finalCount, MIN_GAME_SIZE), max);
-    const ids = qualifiers(standings, trState.finalCount);
-    trState.tables = ids.length >= MIN_GAME_SIZE ? [ids] : [];
+    trState.tables = rankedTables(standings, trState.finalCount);
     return;
   }
 
@@ -2326,7 +2324,7 @@ function redrawTournamentTables() {
 function tournamentRoundProblem() {
   if (!trState || trState.tables.length === 0) {
     return trState && trState.method === 'ranked'
-      ? 'Det behövs minst 2 rankade deltagare för en final.'
+      ? 'Det behövs minst 2 deltagare i tabellen för en slutomgång.'
       : 'Välj minst 2 deltagare.';
   }
   const bad = trState.tables.findIndex(ids => ids.length < MIN_GAME_SIZE || ids.length > MAX_GAME_SIZE);
@@ -2341,7 +2339,9 @@ function renderTournamentRoundModal() {
   const standings = isFinal ? tournamentStandings(tournament) : null;
   const rankOf = standings ? new Map(standings.map(r => [r.playerId, r])) : null;
 
-  $('#tr-modal-title').textContent = isFinal ? 'Final' : `Omgång ${tournament.rounds.length + 1}`;
+  $('#tr-modal-title').textContent = isFinal
+    ? `Slutomgång ${tournament.rounds.length + 1}`
+    : `Omgång ${tournament.rounds.length + 1}`;
   $$('#tr-methods .draw-method').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.method === trState.method);
     // Finalen kräver en tabell att ranka efter.
@@ -2364,7 +2364,7 @@ function renderTournamentRoundModal() {
   const preview = trState.tables.map((ids, i) => `
     <div class="tr-table">
       <div class="tr-table__head">
-        <span>${isFinal ? '🏆 Finalbord' : `Bord ${i + 1}`}</span>
+        <span>${isFinal && i === 0 ? '🏆 Finalbord' : `Bord ${i + 1}`}</span>
         <span class="tr-table__count">${ids.length} spelare</span>
       </div>
       <div class="tr-chips">
@@ -2382,7 +2382,7 @@ function renderTournamentRoundModal() {
 
   $('#tr-preview').innerHTML = preview || '<p class="field-hint">Inga bord att visa.</p>';
   $('#btn-tr-confirm').disabled = Boolean(problem);
-  $('#btn-tr-confirm').textContent = isFinal ? 'Starta finalen' : 'Starta omgången';
+  $('#btn-tr-confirm').textContent = isFinal ? 'Starta slutomgången' : 'Starta omgången';
   const hint = $('#tr-method-hint');
   hint.textContent = problem || DRAW_METHOD_HINTS[trState.method] || '';
   hint.classList.toggle('field-hint--warning', Boolean(problem));
@@ -2476,7 +2476,7 @@ function confirmTournamentRound() {
   closeTournamentRoundModal();
   tournamentTab = 'rounds';
   renderTournament();
-  showToast(isFinal ? 'Finalen är lottad' : `Omgång ${round.number} är lottad`);
+  showToast(isFinal ? 'Slutomgången är lottad' : `Omgång ${round.number} är lottad`);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
