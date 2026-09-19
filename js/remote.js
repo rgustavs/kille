@@ -168,6 +168,50 @@ export const SuperAdmin = {
     return rpc('kille_sa_remove_player', {
       p_username: cred.username, p_password: cred.password, p_group_id: groupId, p_player_id: playerId
     });
+  },
+
+  /** Hela gruppens innehåll — medlemmar, spelare, protokoll, turneringar, aktivitet. */
+  groupDetail(cred, groupId) {
+    return rpc('kille_sa_group_detail', {
+      p_username: cred.username, p_password: cred.password, p_group_id: groupId
+    });
+  },
+
+  /** Alla användare i plattformen, per sammanslagen person och per namn. */
+  listPeople(cred) {
+    return rpc('kille_sa_list_people', { p_username: cred.username, p_password: cred.password });
+  },
+
+  /**
+   * Slå ihop identiteter till en person.
+   * @param {object[]} identities - [{ kind: 'player'|'member', groupId, id }]
+   */
+  mergePeople(cred, identities, displayName, personId) {
+    return rpc('kille_sa_merge_people', {
+      p_username: cred.username, p_password: cred.password,
+      p_identities: identities,
+      p_display_name: displayName || null,
+      p_person_id: personId || null
+    });
+  },
+
+  renamePerson(cred, personId, name) {
+    return rpc('kille_sa_rename_person', {
+      p_username: cred.username, p_password: cred.password, p_person_id: personId, p_name: name
+    });
+  },
+
+  splitPerson(cred, personId) {
+    return rpc('kille_sa_split_person', {
+      p_username: cred.username, p_password: cred.password, p_person_id: personId
+    });
+  },
+
+  unlinkIdentity(cred, kind, groupId, id) {
+    return rpc('kille_sa_unlink_identity', {
+      p_username: cred.username, p_password: cred.password,
+      p_kind: kind, p_group_id: groupId, p_id: id
+    });
   }
 };
 

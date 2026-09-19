@@ -16,7 +16,11 @@ const FRIENDLY_ERRORS = {
   GAME_ID_REQUIRED: 'Spelet saknar id.',
   INVALID_ROLE: 'Ogiltig roll.',
   INVALID_ADMIN_LOGIN: 'Fel användarnamn eller lösenord.',
-  ADMIN_ALREADY_EXISTS: 'En administratör finns redan.'
+  ADMIN_ALREADY_EXISTS: 'En administratör finns redan.',
+  GROUP_NOT_FOUND: 'Gruppen finns inte längre.',
+  MERGE_NEEDS_TWO: 'Markera minst två användare att slå ihop.',
+  PERSON_NAME_REQUIRED: 'Personen måste ha ett namn.',
+  INVALID_IDENTITY_KIND: 'Okänd användartyp.'
 };
 
 export class RpcError extends Error {

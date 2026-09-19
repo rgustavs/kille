@@ -33,6 +33,7 @@ async function runTests() {
   const { Outbox, Groups, SuperAdmin } = await import('../js/remote.js');
   const { rpc, RpcError } = await import('../js/supabase.js');
   const { slugify } = await import('../js/router.js');
+  const { nameKey } = await import('../js/util.js');
 
   const snapshot = {
     group: { id: 'G1', name: 'Testgruppen', slug: 'testgruppen', joinCode: 'ABC234' },
@@ -189,6 +190,71 @@ async function runTests() {
     assert.strictEqual(pull.body.p_member_id, 'm1', 'pull ska bära medlems-id');
     console.log('✅ slug/super-admin RPC mapping passes');
   } catch (err) { failures++; console.error('❌ slug/super-admin RPC mapping failed', err); }
+
+  // Test: namnnyckeln hittar samma namn oavsett skiftläge och svenska tecken.
+  // Speglar _kille_name_key i databasen — klient och server måste gruppera lika.
+  try {
+    assert.strictEqual(nameKey('Robert'), 'robert');
+    assert.strictEqual(nameKey('  RÓBERT '), 'robert');
+    assert.strictEqual(nameKey('Robert Öström'), 'robertostrom');
+    assert.strictEqual(nameKey('Ann-Marie'), 'annmarie');
+    assert.notStrictEqual(nameKey('Robert'), nameKey('Roberta'));
+    console.log('✅ nameKey passes');
+  } catch (err) { failures++; console.error('❌ nameKey failed', err); }
+
+  // Test: super-admin kan titta i en grupp och hantera användare över
+  // gruppgränserna — anropen ska mappa till rätt RPC med rätt parametrar.
+  try {
+    fetchMode = 'ok';
+    const cred = { username: 'admin', password: 'hemligt' };
+
+    fetchCalls.length = 0;
+    await SuperAdmin.groupDetail(cred, 'G1');
+    const detail = fetchCalls.find(c => c.url.endsWith('/kille_sa_group_detail'));
+    assert.ok(detail, 'kille_sa_group_detail anropad');
+    assert.strictEqual(detail.body.p_group_id, 'G1');
+
+    fetchCalls.length = 0;
+    await SuperAdmin.listPeople(cred);
+    assert.ok(fetchCalls.find(c => c.url.endsWith('/kille_sa_list_people')), 'kille_sa_list_people anropad');
+
+    fetchCalls.length = 0;
+    const identities = [
+      { kind: 'player', groupId: 'G1', id: 'p1' },
+      { kind: 'player', groupId: 'G2', id: 'p2' },
+      { kind: 'member', groupId: 'G1', id: 'm1' }
+    ];
+    await SuperAdmin.mergePeople(cred, identities, 'Robert Gustavsson');
+    const merge = fetchCalls.find(c => c.url.endsWith('/kille_sa_merge_people'));
+    assert.ok(merge, 'kille_sa_merge_people anropad');
+    assert.strictEqual(merge.body.p_identities.length, 3);
+    assert.deepStrictEqual(merge.body.p_identities[1], { kind: 'player', groupId: 'G2', id: 'p2' });
+    assert.strictEqual(merge.body.p_display_name, 'Robert Gustavsson');
+    assert.strictEqual(merge.body.p_person_id, null, 'ny person när inget id anges');
+
+    fetchCalls.length = 0;
+    await SuperAdmin.mergePeople(cred, identities, null, 'person-1');
+    const reuse = fetchCalls.find(c => c.url.endsWith('/kille_sa_merge_people'));
+    assert.strictEqual(reuse.body.p_person_id, 'person-1', 'befintlig person återanvänds');
+    assert.strictEqual(reuse.body.p_display_name, null);
+
+    fetchCalls.length = 0;
+    await SuperAdmin.unlinkIdentity(cred, 'player', 'G2', 'p2');
+    const unlink = fetchCalls.find(c => c.url.endsWith('/kille_sa_unlink_identity'));
+    assert.ok(unlink, 'kille_sa_unlink_identity anropad');
+    assert.strictEqual(unlink.body.p_kind, 'player');
+    assert.strictEqual(unlink.body.p_id, 'p2');
+
+    fetchCalls.length = 0;
+    await SuperAdmin.splitPerson(cred, 'person-1');
+    assert.ok(fetchCalls.find(c => c.url.endsWith('/kille_sa_split_person')), 'kille_sa_split_person anropad');
+
+    fetchCalls.length = 0;
+    await SuperAdmin.renamePerson(cred, 'person-1', 'Robert G');
+    const rename = fetchCalls.find(c => c.url.endsWith('/kille_sa_rename_person'));
+    assert.strictEqual(rename.body.p_name, 'Robert G');
+    console.log('✅ super-admin group/people RPC mapping passes');
+  } catch (err) { failures++; console.error('❌ super-admin group/people RPC mapping failed', err); }
 
   if (failures > 0) {
     console.error(`${failures} test group(s) failed.`);

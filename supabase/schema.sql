@@ -71,6 +71,26 @@ create table if not exists public.kille_group_players (
   primary key (group_id, id)
 );
 
+-- Personer: samma människa dyker ofta upp i flera grupper, och kan finnas både
+-- som medlem (inloggning) och som spelare (roster) i samma grupp. En rad här
+-- knyter ihop de identiteterna till EN person. Sammanslagningen är en koppling,
+-- inte en flytt: varje grupp behåller sina spelare, protokoll och statistik —
+-- men super-admin ser och hanterar dem som en enda användare.
+create table if not exists public.kille_people (
+  id           uuid primary key default gen_random_uuid(),
+  display_name text not null,
+  created_at   timestamptz not null default now()
+);
+
+-- Idempotent för databaser som skapades innan personer fanns.
+alter table public.kille_group_players
+  add column if not exists person_id uuid references public.kille_people(id) on delete set null;
+alter table public.kille_group_members
+  add column if not exists person_id uuid references public.kille_people(id) on delete set null;
+
+create index if not exists kille_group_players_person on public.kille_group_players (person_id);
+create index if not exists kille_group_members_person on public.kille_group_members (person_id);
+
 create table if not exists public.kille_group_games (
   id         text not null,
   group_id   uuid not null references public.kille_groups(id) on delete cascade,
@@ -121,6 +141,7 @@ alter table public.kille_group_players   enable row level security;
 alter table public.kille_group_games     enable row level security;
 alter table public.kille_group_tournaments enable row level security;
 alter table public.kille_admins          enable row level security;
+alter table public.kille_people          enable row level security;
 alter table public.kille_activity        enable row level security;
 
 revoke all on public.kille_groups        from anon, authenticated;
@@ -129,6 +150,7 @@ revoke all on public.kille_group_players from anon, authenticated;
 revoke all on public.kille_group_games   from anon, authenticated;
 revoke all on public.kille_group_tournaments from anon, authenticated;
 revoke all on public.kille_admins        from anon, authenticated;
+revoke all on public.kille_people        from anon, authenticated;
 revoke all on public.kille_activity      from anon, authenticated;
 
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -305,6 +327,39 @@ begin
   returning role into v_role;
   return v_role;
 end;
+$$;
+
+-- Normaliserad namnnyckel: hittar samma namn oavsett skiftläge, mellanslag och
+-- svenska tecken ("Robert", "robert " och "RÓBERT" ger alla nyckeln "robert").
+create or replace function public._kille_name_key(p_name text)
+returns text
+language sql
+immutable
+set search_path = public, extensions
+as $$
+  select regexp_replace(
+           translate(lower(trim(coalesce(p_name, ''))),
+                     'åäàáâãöøòóôõüùúûñçéèêëíìîïý',
+                     'aaaaaaoooooouuuunceeeeiiiiy'),
+           '[^a-z0-9]+', '', 'g');
+$$;
+
+-- Spelarens statistik inom en grupp: antal spel hen deltagit i och antal
+-- vunna omgångar. Läses ur protokollens jsonb, samma källa som appens statistik.
+create or replace function public._kille_player_stats(p_group_id uuid, p_player_id text)
+returns jsonb
+language sql
+security definer
+set search_path = public, extensions
+as $$
+  select jsonb_build_object(
+    'games', (select count(*) from public.kille_group_games gm
+              where gm.group_id = p_group_id
+                and jsonb_exists(coalesce(gm.data->'playerIds', '[]'::jsonb), p_player_id)),
+    'wins',  (select count(*) from public.kille_group_games gm
+              cross join lateral jsonb_array_elements(coalesce(gm.data->'rounds', '[]'::jsonb)) r
+              where gm.group_id = p_group_id and r->>'winnerId' = p_player_id)
+  );
 $$;
 
 -- ─── Aktivitetsloggning ────────────────────────────────────────────────────────
@@ -1133,11 +1188,13 @@ begin
   perform public._kille_require_sa(p_username, p_password);
   return jsonb_build_object(
     'members', coalesce((
-      select jsonb_agg(jsonb_build_object('id', m.id, 'name', m.name, 'role', m.role)
+      select jsonb_agg(jsonb_build_object(
+          'id', m.id, 'name', m.name, 'role', m.role, 'personId', m.person_id)
         order by m.role desc, m.created_at)
       from public.kille_group_members m where m.group_id = p_group_id), '[]'::jsonb),
     'players', coalesce((
-      select jsonb_agg(jsonb_build_object('id', p.id, 'name', p.name)
+      select jsonb_agg(jsonb_build_object(
+          'id', p.id, 'name', p.name, 'personId', p.person_id)
         order by p.created_at)
       from public.kille_group_players p where p.group_id = p_group_id), '[]'::jsonb)
   );
@@ -1174,9 +1231,367 @@ begin
 end;
 $$;
 
+-- ─── Titta i en grupp (läsläge) ──────────────────────────────────────────────
+-- Hela gruppens innehåll i ett anrop: medlemmar, spelare med statistik,
+-- protokoll, turneringar och senaste aktivitet. Super-admin kan därmed titta
+-- in i vilken grupp som helst utan att känna till dess grupp- eller admin-kod.
+create or replace function public.kille_sa_group_detail(
+  p_username text, p_password text, p_group_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare v_result jsonb;
+begin
+  perform public._kille_require_sa(p_username, p_password);
+  if not exists (select 1 from public.kille_groups where id = p_group_id) then
+    raise exception 'GROUP_NOT_FOUND' using errcode = '22023';
+  end if;
+
+  select jsonb_build_object(
+    'group', (
+      select jsonb_build_object(
+        'id', g.id, 'name', g.name, 'slug', g.slug, 'joinCode', g.join_code,
+        'createdAt', g.created_at,
+        'lastActivityAt', (select max(a.created_at) from public.kille_activity a
+                           where a.group_id = g.id)
+      )
+      from public.kille_groups g where g.id = p_group_id),
+
+    'members', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', m.id, 'name', m.name, 'role', m.role, 'personId', m.person_id,
+        'lastSeenAt', m.last_seen_at, 'createdAt', m.created_at
+      ) order by m.role desc, m.created_at)
+      from public.kille_group_members m where m.group_id = p_group_id), '[]'::jsonb),
+
+    'players', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', p.id, 'name', p.name, 'personId', p.person_id, 'createdAt', p.created_at,
+        'games', (public._kille_player_stats(p.group_id, p.id)->>'games')::int,
+        'wins',  (public._kille_player_stats(p.group_id, p.id)->>'wins')::int
+      ) order by p.created_at)
+      from public.kille_group_players p where p.group_id = p_group_id), '[]'::jsonb),
+
+    'games', coalesce((
+      select jsonb_agg(s.j order by s.srt desc)
+      from (
+        select gm.created_at as srt, jsonb_build_object(
+          'id', gm.id, 'status', gm.status,
+          'createdAt', gm.created_at, 'updatedAt', gm.updated_at,
+          'rounds', jsonb_array_length(coalesce(gm.data->'rounds', '[]'::jsonb)),
+          'players', coalesce((
+            select jsonb_agg(coalesce(pl.name, t.pid))
+            from jsonb_array_elements_text(coalesce(gm.data->'playerIds', '[]'::jsonb)) as t(pid)
+            left join public.kille_group_players pl
+              on pl.group_id = gm.group_id and pl.id = t.pid), '[]'::jsonb)
+        ) as j
+        from public.kille_group_games gm
+        where gm.group_id = p_group_id
+        order by gm.created_at desc
+        limit 100) s), '[]'::jsonb),
+
+    'tournaments', coalesce((
+      select jsonb_agg(s.j order by s.srt desc)
+      from (
+        select tn.created_at as srt, jsonb_build_object(
+          'id', tn.id, 'name', tn.data->>'name', 'status', tn.status,
+          'createdAt', tn.created_at,
+          'participants', jsonb_array_length(coalesce(tn.data->'playerIds', '[]'::jsonb)),
+          'rounds', jsonb_array_length(coalesce(tn.data->'rounds', '[]'::jsonb))
+        ) as j
+        from public.kille_group_tournaments tn
+        where tn.group_id = p_group_id
+        order by tn.created_at desc
+        limit 100) s), '[]'::jsonb),
+
+    'activity', coalesce((
+      select jsonb_agg(s.j order by s.srt desc)
+      from (
+        select a.created_at as srt, jsonb_build_object(
+          'id', a.id, 'eventType', a.event_type, 'category', a.category,
+          'memberName', a.member_name, 'detail', a.detail, 'createdAt', a.created_at
+        ) as j
+        from public.kille_activity a
+        where a.group_id = p_group_id
+        order by a.created_at desc, a.id desc
+        limit 30) s), '[]'::jsonb)
+  ) into v_result;
+
+  return v_result;
+end;
+$$;
+
+-- ─── Användare över gruppgränserna ───────────────────────────────────────────
+-- Alla identiteter i plattformen (spelare + medlemmar) grupperade dels per
+-- sammanslagen person, dels per normaliserat namn. Namn som förekommer på
+-- flera håll utan att vara ihopknutna markeras `mergeable` — det är dem
+-- super-admin kan slå ihop.
+create or replace function public.kille_sa_list_people(p_username text, p_password text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare v_result jsonb;
+begin
+  perform public._kille_require_sa(p_username, p_password);
+
+  with ident as (
+    select 'player'::text as kind, pl.id as id, pl.group_id, g.name as group_name,
+           g.slug as group_slug, pl.name, pl.person_id,
+           (public._kille_player_stats(pl.group_id, pl.id)->>'games')::int as games,
+           (public._kille_player_stats(pl.group_id, pl.id)->>'wins')::int as wins
+    from public.kille_group_players pl
+    join public.kille_groups g on g.id = pl.group_id
+    union all
+    select 'member'::text, m.id::text, m.group_id, g.name, g.slug, m.name, m.person_id, 0, 0
+    from public.kille_group_members m
+    join public.kille_groups g on g.id = m.group_id
+  )
+  select jsonb_build_object(
+    'people', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', pe.id,
+        'displayName', pe.display_name,
+        'createdAt', pe.created_at,
+        'groups', (select count(distinct i.group_id) from ident i where i.person_id = pe.id),
+        'games',  (select coalesce(sum(i.games), 0) from ident i where i.person_id = pe.id),
+        'wins',   (select coalesce(sum(i.wins), 0) from ident i where i.person_id = pe.id),
+        'identities', coalesce((
+          select jsonb_agg(jsonb_build_object(
+            'kind', i.kind, 'id', i.id, 'groupId', i.group_id, 'groupName', i.group_name,
+            'name', i.name, 'games', i.games, 'wins', i.wins
+          ) order by i.group_name, i.kind, i.name)
+          from ident i where i.person_id = pe.id), '[]'::jsonb)
+      ) order by pe.display_name)
+      from public.kille_people pe), '[]'::jsonb),
+
+    'names', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'key', k.name_key,
+        'name', k.display,
+        'groups', k.group_count,
+        'mergeable', k.mergeable,
+        'occurrences', k.occurrences
+      ) order by k.mergeable desc, k.display)
+      from (
+        select public._kille_name_key(i.name) as name_key,
+               min(i.name) as display,
+               count(distinct i.group_id) as group_count,
+               (count(*) > 1 and (bool_or(i.person_id is null)
+                                  or count(distinct i.person_id) > 1)) as mergeable,
+               jsonb_agg(jsonb_build_object(
+                 'kind', i.kind, 'id', i.id, 'groupId', i.group_id,
+                 'groupName', i.group_name, 'name', i.name, 'personId', i.person_id,
+                 'games', i.games, 'wins', i.wins
+               ) order by i.group_name, i.kind, i.name) as occurrences
+        from ident i
+        group by public._kille_name_key(i.name)) k), '[]'::jsonb)
+  ) into v_result;
+
+  return v_result;
+end;
+$$;
+
+-- Slå ihop identiteter till en person. `p_identities` är en array av
+-- {kind: 'player'|'member', groupId, id}. Är någon av dem redan kopplad till en
+-- person återanvänds den (och eventuella övriga personer absorberas), annars
+-- skapas en ny. Inga protokoll rörs — kopplingen är ren identitetsdata.
+create or replace function public.kille_sa_merge_people(
+  p_username text, p_password text,
+  p_identities jsonb,
+  p_display_name text default null,
+  p_person_id uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_person   uuid := p_person_id;
+  v_name     text := nullif(trim(coalesce(p_display_name, '')), '');
+  v_absorbed uuid[];
+  v_count    int;
+begin
+  perform public._kille_require_sa(p_username, p_password);
+
+  if p_identities is null or jsonb_typeof(p_identities) <> 'array'
+     or jsonb_array_length(p_identities) < 2 then
+    raise exception 'MERGE_NEEDS_TWO' using errcode = '22023';
+  end if;
+
+  -- Personer som de valda identiteterna redan tillhör.
+  select coalesce(array_agg(distinct pid), '{}'::uuid[]) into v_absorbed
+  from (
+    select pl.person_id as pid
+    from jsonb_to_recordset(p_identities) as t(kind text, "groupId" uuid, id text)
+    join public.kille_group_players pl on pl.group_id = t."groupId" and pl.id = t.id
+    where t.kind = 'player' and pl.person_id is not null
+    union
+    select m.person_id
+    from jsonb_to_recordset(p_identities) as t(kind text, "groupId" uuid, id text)
+    join public.kille_group_members m on m.group_id = t."groupId" and m.id::text = t.id
+    where t.kind = 'member' and m.person_id is not null
+  ) s;
+
+  if v_person is null then
+    v_person := (select x from unnest(v_absorbed) x limit 1);
+  end if;
+
+  -- Utan valt namn: ta namnet från första identiteten i urvalet.
+  if v_name is null then
+    select coalesce(
+      (select pl.name
+       from jsonb_to_recordset(p_identities) as t(kind text, "groupId" uuid, id text)
+       join public.kille_group_players pl on pl.group_id = t."groupId" and pl.id = t.id
+       where t.kind = 'player' limit 1),
+      (select m.name
+       from jsonb_to_recordset(p_identities) as t(kind text, "groupId" uuid, id text)
+       join public.kille_group_members m on m.group_id = t."groupId" and m.id::text = t.id
+       where t.kind = 'member' limit 1)) into v_name;
+  end if;
+
+  if v_person is null then
+    if v_name is null then
+      raise exception 'PERSON_NAME_REQUIRED' using errcode = '22023';
+    end if;
+    insert into public.kille_people (display_name) values (v_name) returning id into v_person;
+  elsif p_display_name is not null and v_name is not null then
+    update public.kille_people set display_name = v_name where id = v_person;
+  end if;
+
+  update public.kille_group_players pl set person_id = v_person
+  from jsonb_to_recordset(p_identities) as t(kind text, "groupId" uuid, id text)
+  where t.kind = 'player' and pl.group_id = t."groupId" and pl.id = t.id;
+
+  update public.kille_group_members m set person_id = v_person
+  from jsonb_to_recordset(p_identities) as t(kind text, "groupId" uuid, id text)
+  where t.kind = 'member' and m.group_id = t."groupId" and m.id::text = t.id;
+
+  -- Absorbera personer som de valda identiteterna tidigare tillhörde.
+  update public.kille_group_players set person_id = v_person
+   where person_id = any(v_absorbed) and person_id <> v_person;
+  update public.kille_group_members set person_id = v_person
+   where person_id = any(v_absorbed) and person_id <> v_person;
+  delete from public.kille_people where id = any(v_absorbed) and id <> v_person;
+
+  select count(*) into v_count from (
+    select 1 from public.kille_group_players where person_id = v_person
+    union all
+    select 1 from public.kille_group_members where person_id = v_person) s;
+
+  perform public._kille_log(null, null, p_username, 'people_merged', 'admin',
+    jsonb_build_object('personId', v_person, 'name', v_name, 'identities', v_count));
+
+  return jsonb_build_object(
+    'ok', true, 'personId', v_person, 'identities', v_count,
+    'displayName', (select display_name from public.kille_people where id = v_person));
+end;
+$$;
+
+-- Byt visningsnamn på en sammanslagen person.
+create or replace function public.kille_sa_rename_person(
+  p_username text, p_password text, p_person_id uuid, p_name text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare v_name text := nullif(trim(coalesce(p_name, '')), '');
+begin
+  perform public._kille_require_sa(p_username, p_password);
+  if v_name is null then
+    raise exception 'PERSON_NAME_REQUIRED' using errcode = '22023';
+  end if;
+  update public.kille_people set display_name = v_name where id = p_person_id;
+  return jsonb_build_object('ok', true, 'displayName', v_name);
+end;
+$$;
+
+-- Dela upp en person igen: identiteterna blir fristående, inget annat ändras.
+create or replace function public.kille_sa_split_person(
+  p_username text, p_password text, p_person_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+begin
+  perform public._kille_require_sa(p_username, p_password);
+  update public.kille_group_players set person_id = null where person_id = p_person_id;
+  update public.kille_group_members set person_id = null where person_id = p_person_id;
+  delete from public.kille_people where id = p_person_id;
+  perform public._kille_log(null, null, p_username, 'people_split', 'admin',
+    jsonb_build_object('personId', p_person_id));
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
+-- Koppla loss EN identitet från sin person. Blir det färre än två identiteter
+-- kvar tas personen bort helt — en person med en enda identitet är ingen
+-- sammanslagning.
+create or replace function public.kille_sa_unlink_identity(
+  p_username text, p_password text, p_kind text, p_group_id uuid, p_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_person uuid;
+  v_left   int;
+begin
+  perform public._kille_require_sa(p_username, p_password);
+
+  if p_kind = 'player' then
+    select person_id into v_person from public.kille_group_players
+     where group_id = p_group_id and id = p_id;
+    update public.kille_group_players set person_id = null
+     where group_id = p_group_id and id = p_id;
+  elsif p_kind = 'member' then
+    select person_id into v_person from public.kille_group_members
+     where group_id = p_group_id and id::text = p_id;
+    update public.kille_group_members set person_id = null
+     where group_id = p_group_id and id::text = p_id;
+  else
+    raise exception 'INVALID_IDENTITY_KIND' using errcode = '22023';
+  end if;
+
+  if v_person is null then
+    return jsonb_build_object('ok', true, 'personId', null);
+  end if;
+
+  select count(*) into v_left from (
+    select 1 from public.kille_group_players where person_id = v_person
+    union all
+    select 1 from public.kille_group_members where person_id = v_person) s;
+
+  if v_left < 2 then
+    update public.kille_group_players set person_id = null where person_id = v_person;
+    update public.kille_group_members set person_id = null where person_id = v_person;
+    delete from public.kille_people where id = v_person;
+    return jsonb_build_object('ok', true, 'personId', v_person, 'removed', true);
+  end if;
+
+  return jsonb_build_object('ok', true, 'personId', v_person, 'identities', v_left);
+end;
+$$;
+
 -- ─── Rättigheter ─────────────────────────────────────────────────────────────
 -- Endast EXECUTE på de publika RPC-funktionerna ges till anon. Interna
 -- hjälpfunktioner (_kille_*) exponeras inte.
+--
+-- OBS: PostgreSQL ger automatiskt EXECUTE till PUBLIC på nya funktioner, och
+-- anon ärver den rättigheten. Därför måste PUBLIC också återkallas nedan —
+-- annars kunde t.ex. _kille_snapshot() anropas direkt och läsa ut en hel
+-- grupps roster och protokoll utan att känna till gruppens join_code.
 
 revoke all on function
   public._kille_group_by_code(uuid, text),
@@ -1186,8 +1601,12 @@ revoke all on function
   public._kille_upsert_member(uuid, text, text),
   public._kille_slugify(text),
   public._kille_unique_slug(text),
-  public._kille_require_sa(text, text)
-from anon, authenticated;
+  public._kille_require_sa(text, text),
+  public._kille_name_key(text),
+  public._kille_player_stats(uuid, text),
+  public._kille_log(uuid, uuid, text, text, text, jsonb),
+  public._kille_touch_member(uuid, uuid)
+from public, anon, authenticated;
 
 grant execute on function
   public.kille_create_group(text, text, text, text),
@@ -1226,5 +1645,11 @@ grant execute on function
   public.kille_sa_delete_group(text, text, uuid),
   public.kille_sa_list_users(text, text, uuid),
   public.kille_sa_remove_member(text, text, uuid, uuid),
-  public.kille_sa_remove_player(text, text, uuid, text)
+  public.kille_sa_remove_player(text, text, uuid, text),
+  public.kille_sa_group_detail(text, text, uuid),
+  public.kille_sa_list_people(text, text),
+  public.kille_sa_merge_people(text, text, jsonb, text, uuid),
+  public.kille_sa_rename_person(text, text, uuid, text),
+  public.kille_sa_split_person(text, text, uuid),
+  public.kille_sa_unlink_identity(text, text, text, uuid, text)
 to anon, authenticated;

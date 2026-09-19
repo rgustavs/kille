@@ -175,8 +175,43 @@ group URL takes you straight into that group.
   groups and users from a console at `/?admin=1` (or `/admin`): create/rename/delete
   groups, change slugs, regenerate codes, and remove members/players in any group. The
   first super-admin is created (bootstrapped) from the login screen when none exists.
-  The console also has a **Användning (Usage)** tab — a platform-wide activity monitor
-  (see below).
+  The console has three tabs: **Grupper** (groups, including looking inside one),
+  **Användare** (users across every group) and **Användning** (a platform-wide activity
+  monitor). The last two are described below.
+
+### Looking inside a group
+
+From the group list, **Titta i gruppen** opens any group in read-only mode — no join code
+or admin code needed. One round-trip (`kille_sa_group_detail`) returns the whole group:
+
+- **Members** with role, "last seen" and whether they belong to a merged person.
+- **Players** with how many games they have played and how many rounds they have won.
+- **Protocols** (the 100 most recent games) with date, status, participants and round count.
+- **Tournaments** with name, status, participants and round count.
+- **The group's 30 most recent activity events.**
+
+The group's admin actions (rename, slug, new code, delete) and removal of members/players
+are available from inside the view too, so a whole group can be handled in one place.
+
+### Users across groups
+
+The same person usually plays in several groups, and can exist both as a *member* (a
+login) and as a *player* (a roster entry) within one group. The **Användare** tab lists
+every identity in the platform, grouped by a normalised name key — `Robert`, `robert ` and
+`RÓBERT` all match (`_kille_name_key` in SQL, `nameKey()` in
+[`js/util.js`](js/util.js); both are covered by tests).
+
+- **Samma namn på flera håll** highlights names that occur in more than one place and are
+  not linked yet. **Slå ihop** merges all of them into one person.
+- Checkboxes allow merging by hand when the spelling differs (`Rob` and `Robert`), across
+  names and groups alike.
+- **Sammanslagna personer** shows each merged person with its combined reach —
+  number of groups, games and wins — and can rename it, unlink a single account
+  (**Koppla loss**) or split it again (**Dela upp**).
+
+A merge is a **link, not a move**: the identities get a shared row in `kille_people` via
+`person_id`. No game, protocol or statistic is rewritten, every group keeps its own data,
+and the merge is fully reversible. Merges and splits are written to the activity log.
 
 ### Usage activity monitoring
 
@@ -205,9 +240,9 @@ Activity is captured three ways, all writing to the append-only `kille_activity`
    runs in **group mode** — in local mode nothing ever leaves the device.
 
 Only the super-admin can read the activity log (via `kille_sa_usage_overview` and
-`kille_sa_activity_feed`). To enable it on an existing database, just re-run
-[`supabase/schema.sql`](supabase/schema.sql) — it is idempotent and adds the new table,
-column and functions in place.
+`kille_sa_activity_feed`). To enable it — or the group view and user merging — on an
+existing database, just re-run [`supabase/schema.sql`](supabase/schema.sql): it is
+idempotent and adds the new tables, columns and functions in place.
 
 ### One-time setup
 

@@ -3515,6 +3515,90 @@ body {
   color: var(--text-muted);
 }
 
+/* ─── Super-admin: titta i grupp & användarhantering ─────────────────────── */
+.member-item__action--primary {
+  color: var(--green-600);
+  border-color: var(--green-300);
+  background: var(--green-100);
+}
+.member-item__action--primary:hover { background: var(--green-300); color: var(--cream-50); }
+
+/* En markerad identitet i användarlistan (namn + kryssruta). */
+.sa-ident {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+  cursor: pointer;
+}
+.sa-ident input { flex-shrink: 0; width: 16px; height: 16px; accent-color: var(--green-600); }
+.sa-ident__group {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  color: var(--green-600);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40%;
+}
+.sa-ident__stats {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.sa-ident__linked { flex-shrink: 0; font-size: 0.8rem; }
+
+/* Ett namn och alla konton som bär det. */
+.sa-name {
+  padding: var(--space-md);
+  background: var(--cream-50);
+  border: 1px solid var(--cream-300);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-sm);
+}
+.sa-name--candidate { border-color: var(--gold-300); background: var(--gold-100); }
+.sa-name__head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+.sa-name__name { font-weight: 700; color: var(--text-primary); }
+.sa-name__meta { flex: 1; font-size: 0.78rem; color: var(--text-muted); }
+
+/* En sammanslagen person med sina konton. */
+.sa-person {
+  padding: var(--space-md);
+  background: var(--cream-50);
+  border: 1px solid var(--green-300);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-sm);
+}
+.sa-person__head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+.sa-person__name { font-weight: 700; color: var(--text-primary); }
+.sa-person__meta { font-size: 0.78rem; color: var(--text-muted); }
+.sa-person .admin-group-item__actions { margin-top: var(--space-sm); }
+
+/* Åtgärdsrad när konton är markerade för sammanslagning. */
+.sa-selection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  border-color: var(--gold-300);
+}
+.sa-selection__text { font-weight: 600; color: var(--text-primary); }
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Tournaments
    ═══════════════════════════════════════════════════════════════════════════ */

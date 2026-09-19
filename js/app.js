@@ -26,6 +26,7 @@ import { Groups, SuperAdmin, Outbox, onSyncStatus } from './remote.js';
 import { Activity } from './analytics.js';
 import { SUPABASE_ENABLED } from './config.js';
 import { groupSlugFromUrl, isAdminUrl, groupUrl, adminUrl, setUrlForGroup, clearUrl } from './router.js';
+import { nameKey } from './util.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STATE
@@ -582,6 +583,10 @@ let saTab = 'groups';     // 'groups' | 'usage'
 let saUsage = null;       // cached usage overview (KPIs + daily series)
 let saFeed = [];          // cached activity feed rows
 let saFeedFilter = { eventType: null }; // active feed filter
+let saGroupView = null;   // { groupId, detail } when looking inside a group
+let saPeople = null;      // { people, names } — users across every group
+let saPeopleQuery = '';   // free-text filter in the users tab
+const saSelected = new Map(); // identity key → identity picked for merging
 
 async function openAdmin() {
   screenStack.push(currentScreen);
@@ -633,13 +638,18 @@ function renderAdmin() {
 
     <div class="admin-tabs">
       <button class="admin-tab ${saTab === 'groups' ? 'admin-tab--active' : ''}" data-sa-tab="groups">Grupper</button>
+      <button class="admin-tab ${saTab === 'people' ? 'admin-tab--active' : ''}" data-sa-tab="people">Användare</button>
       <button class="admin-tab ${saTab === 'usage' ? 'admin-tab--active' : ''}" data-sa-tab="usage">Användning</button>
     </div>
 
-    ${saTab === 'usage' ? renderUsageDashboard() : renderGroupsTab()}`;
+    ${saTab === 'usage' ? renderUsageDashboard()
+      : saTab === 'people' ? renderPeopleTab()
+      : renderGroupsTab()}`;
 }
 
 function renderGroupsTab() {
+  if (saGroupView) return renderGroupDetail();
+
   const groupsHtml = saGroups.length ? saGroups.map(g => `
     <div class="admin-group-item" data-group="${escHtml(g.id)}">
       <div class="admin-group-item__head">
@@ -653,6 +663,7 @@ function renderGroupsTab() {
         ${Number(g.activeMembers7d) || 0} aktiva (7d) · ${Number(g.eventsLast7d) || 0} händelser (7d) · senast aktiv ${formatRelativeTime(g.lastActivityAt)}
       </div>
       <div class="admin-group-item__actions">
+        <button class="member-item__action member-item__action--primary" data-sa-open="${escHtml(g.id)}">Titta i gruppen</button>
         <button class="member-item__action" data-sa-rename="${escHtml(g.id)}">Byt namn</button>
         <button class="member-item__action" data-sa-slug="${escHtml(g.id)}">Byt slug</button>
         <button class="member-item__action" data-sa-regen="${escHtml(g.id)}">Ny kod</button>
@@ -705,6 +716,251 @@ function renderAdminUsers(groupId) {
     </div>`;
 }
 
+// ─── Titta i en grupp (super-admin, läsläge) ─────────────────────────────────
+
+/** Datum + klockslag på svenska, tomt värde → tankstreck. */
+function saDateTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return '—';
+  return d.toLocaleDateString('sv-SE', {
+    year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+  });
+}
+
+/** Etikett för en identitet: spelare (roster) eller medlem (inloggning). */
+function identityBadge(kind) {
+  return kind === 'member'
+    ? '<span class="role-badge role-badge--admin">Medlem</span>'
+    : '<span class="role-badge role-badge--member">Spelare</span>';
+}
+
+/** Nyckel som identifierar en identitet unikt över hela plattformen. */
+function identityKey(o) {
+  return `${o.kind}:${o.groupId}:${o.id}`;
+}
+
+function renderGroupDetail() {
+  const back = '<button class="btn btn--ghost" id="sa-group-back">← Alla grupper</button>';
+  const d = saGroupView.detail;
+  if (!d) {
+    return `<div class="panel">${back}
+      <div class="empty-state"><div class="empty-state__text">Laddar gruppen…</div></div></div>`;
+  }
+
+  const g = d.group || {};
+  const members = d.members || [];
+  const players = d.players || [];
+  const games = d.games || [];
+  const tournaments = d.tournaments || [];
+  const activity = d.activity || [];
+
+  const tiles = [
+    ['Medlemmar', members.length], ['Spelare', players.length],
+    ['Spel', games.length], ['Turneringar', tournaments.length]
+  ].map(([label, val]) => `
+    <div class="kpi-tile">
+      <div class="kpi-tile__value">${val}</div>
+      <div class="kpi-tile__label">${label}</div>
+    </div>`).join('');
+
+  const membersHtml = members.map(m => `
+    <li class="member-item">
+      <span class="member-item__name">${escHtml(m.name)}</span>
+      <span class="role-badge role-badge--${m.role === 'admin' ? 'admin' : 'member'}">${m.role === 'admin' ? 'Admin' : 'Medlem'}</span>
+      <span class="sa-ident__stats">Sedd ${formatRelativeTime(m.lastSeenAt)}</span>
+      ${m.personId ? '<span class="sa-ident__linked" title="Sammanslagen användare">🔗</span>' : ''}
+      <button class="member-item__action member-item__action--danger" data-sa-rmuser="${escHtml(m.id)}">Ta bort</button>
+    </li>`).join('') || '<li class="field-hint">Inga medlemmar.</li>';
+
+  const playersHtml = players.map(p => `
+    <li class="member-item">
+      <span class="member-item__name">${escHtml(p.name)}</span>
+      <span class="sa-ident__stats">${p.games} spel · ${p.wins} vinster</span>
+      ${p.personId ? '<span class="sa-ident__linked" title="Sammanslagen användare">🔗</span>' : ''}
+      <button class="member-item__action member-item__action--danger" data-sa-rmplayer="${escHtml(p.id)}">Ta bort</button>
+    </li>`).join('') || '<li class="field-hint">Inga spelare.</li>';
+
+  const gamesHtml = games.map(gm => {
+    const badge = gm.status === 'active'
+      ? '<span class="history-item__badge history-item__badge--active">Pågår</span>'
+      : '<span class="history-item__badge history-item__badge--completed">Avslutad</span>';
+    return `<div class="history-item">
+      <div class="history-item__date">${saDateTime(gm.createdAt)} ${badge}</div>
+      <div class="history-item__players">${escHtml((gm.players || []).join(', ')) || '—'}</div>
+      <div class="history-item__stats"><span>${gm.rounds} omgångar</span></div>
+    </div>`;
+  }).join('') || '<div class="field-hint">Inga spel ännu.</div>';
+
+  const tournamentsHtml = tournaments.map(t => {
+    const badge = t.status === 'active'
+      ? '<span class="history-item__badge history-item__badge--active">Pågår</span>'
+      : '<span class="history-item__badge history-item__badge--completed">Avslutad</span>';
+    return `<div class="history-item">
+      <div class="history-item__date">${saDateTime(t.createdAt)} ${badge}</div>
+      <div class="history-item__players">${escHtml(t.name || 'Turnering')}</div>
+      <div class="history-item__stats"><span>${t.participants} deltagare · ${t.rounds} omgångar</span></div>
+    </div>`;
+  }).join('') || '<div class="field-hint">Inga turneringar ännu.</div>';
+
+  const activityHtml = activity.map(ev => `
+    <li class="feed-item">
+      <span class="feed-item__event">${eventLabel(ev.eventType)}</span>
+      <span class="feed-item__meta">${ev.memberName ? escHtml(ev.memberName) + ' · ' : ''}${formatRelativeTime(ev.createdAt)}</span>
+    </li>`).join('') || '<li class="field-hint">Ingen aktivitet ännu.</li>';
+
+  return `
+    <div class="panel mb-lg">
+      <div class="flex-row" style="justify-content: space-between; align-items: center; gap: var(--space-sm)">
+        ${back}
+        <button class="member-item__action" id="sa-group-reload">Uppdatera</button>
+      </div>
+      <h3 class="panel__title" style="margin-top: var(--space-md)">${escHtml(g.name || '')}</h3>
+      <div class="admin-group-item__meta">
+        /${escHtml(g.slug || '—')} · kod ${escHtml(g.joinCode || '—')} · skapad ${saDateTime(g.createdAt)}
+      </div>
+      <div class="admin-group-item__meta admin-group-item__usage">
+        Senast aktiv ${formatRelativeTime(g.lastActivityAt)}
+      </div>
+      <div class="admin-group-item__actions">
+        <button class="member-item__action" data-sa-rename="${escHtml(g.id)}">Byt namn</button>
+        <button class="member-item__action" data-sa-slug="${escHtml(g.id)}">Byt slug</button>
+        <button class="member-item__action" data-sa-regen="${escHtml(g.id)}">Ny kod</button>
+        <button class="member-item__action member-item__action--danger" data-sa-delete="${escHtml(g.id)}">Radera</button>
+      </div>
+    </div>
+
+    <div class="panel mb-lg">
+      <div class="kpi-grid">${tiles}</div>
+    </div>
+
+    <div class="panel mb-lg">
+      <h3 class="panel__title">Medlemmar (${members.length})</h3>
+      <ul class="member-list">${membersHtml}</ul>
+      <div class="field-label" style="margin-top: var(--space-md)">Spelare (${players.length})</div>
+      <ul class="member-list">${playersHtml}</ul>
+    </div>
+
+    <div class="panel mb-lg">
+      <h3 class="panel__title">Protokoll (${games.length})</h3>
+      ${gamesHtml}
+    </div>
+
+    <div class="panel mb-lg">
+      <h3 class="panel__title">Turneringar (${tournaments.length})</h3>
+      ${tournamentsHtml}
+    </div>
+
+    <div class="panel">
+      <h3 class="panel__title">Senaste aktivitet</h3>
+      <ul class="feed-list">${activityHtml}</ul>
+    </div>`;
+}
+
+// ─── Användare över gruppgränserna (super-admin) ─────────────────────────────
+
+/** En rad i användarlistan, med kryssruta för manuell sammanslagning. */
+function renderIdentityRow(o) {
+  const key = identityKey(o);
+  return `
+    <li class="member-item">
+      <label class="sa-ident">
+        <input type="checkbox" data-sa-pick="${escHtml(key)}" ${saSelected.has(key) ? 'checked' : ''}>
+        <span class="member-item__name">${escHtml(o.name)}</span>
+      </label>
+      <span class="sa-ident__group">${escHtml(o.groupName)}</span>
+      ${identityBadge(o.kind)}
+      ${o.kind === 'player' ? `<span class="sa-ident__stats">${o.games} spel</span>` : ''}
+      ${o.personId ? '<span class="sa-ident__linked" title="Redan sammanslagen">🔗</span>' : ''}
+    </li>`;
+}
+
+function renderPeopleTab() {
+  if (!saPeople) {
+    return '<div class="panel"><div class="empty-state"><div class="empty-state__text">Laddar användare…</div></div></div>';
+  }
+
+  const q = nameKey(saPeopleQuery);
+  const hit = (text) => !q || nameKey(text).includes(q);
+  const people = (saPeople.people || []).filter(p =>
+    hit(p.displayName) || (p.identities || []).some(i => hit(i.name) || hit(i.groupName)));
+  const names = (saPeople.names || []).filter(n =>
+    hit(n.name) || (n.occurrences || []).some(o => hit(o.groupName)));
+  const candidates = names.filter(n => n.mergeable);
+  const rest = names.filter(n => !n.mergeable);
+
+  const selectionBar = saSelected.size ? `
+    <div class="panel mb-lg sa-selection">
+      <span class="sa-selection__text">${plural(saSelected.size, 'markerat konto', 'markerade konton')}</span>
+      <div class="flex-row">
+        <button class="btn btn--ghost" id="sa-select-clear">Avmarkera</button>
+        <button class="btn btn--gold" id="sa-merge-selected">Slå ihop markerade</button>
+      </div>
+    </div>` : '';
+
+  const peopleHtml = people.length ? people.map(p => `
+    <div class="sa-person">
+      <div class="sa-person__head">
+        <span class="sa-person__name">${escHtml(p.displayName)}</span>
+        <span class="sa-person__meta">${plural(p.groups, 'grupp', 'grupper')} · ${p.games} spel · ${p.wins} vinster</span>
+      </div>
+      <ul class="member-list">
+        ${(p.identities || []).map(i => `
+          <li class="member-item">
+            <span class="member-item__name">${escHtml(i.name)}</span>
+            <span class="sa-ident__group">${escHtml(i.groupName)}</span>
+            ${identityBadge(i.kind)}
+            <button class="member-item__action" data-sa-unlink="${escHtml(identityKey(i))}">Koppla loss</button>
+          </li>`).join('')}
+      </ul>
+      <div class="admin-group-item__actions">
+        <button class="member-item__action" data-sa-person-rename="${escHtml(p.id)}">Byt namn</button>
+        <button class="member-item__action member-item__action--danger" data-sa-person-split="${escHtml(p.id)}">Dela upp</button>
+      </div>
+    </div>`).join('')
+    : '<div class="field-hint">Inga sammanslagna personer ännu.</div>';
+
+  const nameBlock = (n) => `
+    <div class="sa-name${n.mergeable ? ' sa-name--candidate' : ''}">
+      <div class="sa-name__head">
+        <span class="sa-name__name">${escHtml(n.name)}</span>
+        <span class="sa-name__meta">${n.groups} ${n.groups === 1 ? 'grupp' : 'grupper'} · ${plural(n.occurrences.length, 'konto', 'konton')}</span>
+        ${n.mergeable
+          ? `<button class="member-item__action member-item__action--primary" data-sa-merge-name="${escHtml(n.key)}">Slå ihop</button>`
+          : ''}
+      </div>
+      <ul class="member-list">${n.occurrences.map(renderIdentityRow).join('')}</ul>
+    </div>`;
+
+  return `
+    ${selectionBar}
+
+    <div class="panel mb-lg">
+      <label class="field-label" for="sa-people-search">Sök användare eller grupp</label>
+      <input type="search" class="input" id="sa-people-search" value="${escHtml(saPeopleQuery)}"
+             placeholder="t.ex. Robert" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <p class="field-hint">Samma person spelar ofta i flera grupper. Slå ihop kontona så
+        räknas de som en användare — varje grupp behåller sina egna spel och protokoll.</p>
+    </div>
+
+    <div class="panel mb-lg">
+      <h3 class="panel__title">Samma namn på flera håll (${candidates.length})</h3>
+      ${candidates.length
+        ? candidates.map(nameBlock).join('')
+        : '<div class="field-hint">Inga dubbletter att slå ihop.</div>'}
+    </div>
+
+    <div class="panel mb-lg">
+      <h3 class="panel__title">Sammanslagna personer (${people.length})</h3>
+      ${peopleHtml}
+    </div>
+
+    <div class="panel">
+      <h3 class="panel__title">Övriga användare (${rest.length})</h3>
+      ${rest.length ? rest.map(nameBlock).join('') : '<div class="field-hint">Inga fler användare.</div>'}
+    </div>`;
+}
+
 // ─── Användnings-dashboard (super-admin) ─────────────────────────────────────
 
 const EVENT_LABELS = {
@@ -721,6 +977,8 @@ const EVENT_LABELS = {
   player_renamed: '✏️ Bytte spelarnamn',
   player_removed: '➖ Tog bort spelare',
   admin_action: '⚙️ Admin-åtgärd',
+  people_merged: '🔗 Slog ihop användare',
+  people_split: '✂️ Delade upp användare',
   screen_view: '👁️ Skärmvisning',
   feature_used: '⭐ Funktion',
   pwa_install: '📲 Installerade appen'
@@ -773,7 +1031,7 @@ function renderUsageDashboard() {
   }).join('');
 
   const filterOptions = ['', 'login', 'game_saved', 'game_deleted', 'player_added',
-    'admin_action', 'screen_view', 'feature_used', 'pwa_install']
+    'admin_action', 'people_merged', 'screen_view', 'feature_used', 'pwa_install']
     .map(v => `<option value="${v}" ${saFeedFilter.eventType === (v || null) ? 'selected' : ''}>${v ? eventLabel(v) : 'Alla händelser'}</option>`)
     .join('');
 
@@ -806,9 +1064,10 @@ function renderUsageDashboard() {
 }
 
 function saShowTab(tab) {
-  saTab = tab === 'usage' ? 'usage' : 'groups';
+  saTab = (tab === 'usage' || tab === 'people') ? tab : 'groups';
   renderAdmin();
   if (saTab === 'usage' && !saUsage) saLoadUsage();
+  if (saTab === 'people' && !saPeople) saLoadPeople();
 }
 
 async function saLoadUsage() {
@@ -880,10 +1139,14 @@ function saLogout() {
   saCred = null;
   saGroups = [];
   saUsersView = null;
+  saGroupView = null;
   saTab = 'groups';
   saUsage = null;
   saFeed = [];
   saFeedFilter = { eventType: null };
+  saPeople = null;
+  saPeopleQuery = '';
+  saSelected.clear();
   renderAdmin();
 }
 
@@ -900,11 +1163,17 @@ async function saCreateGroup() {
   } catch (err) { showToast(err.message || 'Kunde inte skapa grupp'); }
 }
 
+/** Läs om grupplistan, och den öppnade gruppvyn om den gäller samma grupp. */
+async function saAfterGroupChange(id) {
+  if (saGroupView?.groupId === id) await saOpenGroup(id, true);
+  await saLoadGroups();
+}
+
 function saRename(id) {
   const g = saGroups.find(x => x.id === id);
   showPrompt('Nytt gruppnamn', { value: g?.name || '' }, async (name) => {
     if (!name || !name.trim()) return;
-    try { await SuperAdmin.renameGroup(saCred, id, name.trim()); await saLoadGroups(); }
+    try { await SuperAdmin.renameGroup(saCred, id, name.trim()); await saAfterGroupChange(id); }
     catch (err) { showToast(err.message || 'Misslyckades'); }
   });
 }
@@ -913,14 +1182,14 @@ function saSetSlug(id) {
   const g = saGroups.find(x => x.id === id);
   showPrompt('Ny slug (URL)', { value: g?.slug || '' }, async (slug) => {
     if (!slug || !slug.trim()) return;
-    try { const r = await SuperAdmin.setSlug(saCred, id, slug.trim()); showToast(`Slug: ${r.slug}`); await saLoadGroups(); }
+    try { const r = await SuperAdmin.setSlug(saCred, id, slug.trim()); showToast(`Slug: ${r.slug}`); await saAfterGroupChange(id); }
     catch (err) { showToast(err.message || 'Misslyckades'); }
   });
 }
 
 function saRegen(id) {
   showConfirm('Skapa ny gruppkod? Den gamla slutar fungera.', async () => {
-    try { const r = await SuperAdmin.regenCode(saCred, id); showToast(`Ny kod: ${r.joinCode}`); await saLoadGroups(); }
+    try { const r = await SuperAdmin.regenCode(saCred, id); showToast(`Ny kod: ${r.joinCode}`); await saAfterGroupChange(id); }
     catch (err) { showToast(err.message || 'Misslyckades'); }
   });
 }
@@ -928,7 +1197,13 @@ function saRegen(id) {
 function saDelete(id) {
   const g = saGroups.find(x => x.id === id);
   showConfirm(`Radera gruppen "${g?.name || ''}" och all dess data? Kan inte ångras.`, async () => {
-    try { await SuperAdmin.deleteGroup(saCred, id); if (saUsersView?.groupId === id) saUsersView = null; await saLoadGroups(); }
+    try {
+      await SuperAdmin.deleteGroup(saCred, id);
+      if (saUsersView?.groupId === id) saUsersView = null;
+      if (saGroupView?.groupId === id) saGroupView = null;
+      saPeople = null;
+      await saLoadGroups();
+    }
     catch (err) { showToast(err.message || 'Misslyckades'); }
   });
 }
@@ -942,23 +1217,165 @@ async function saViewUsers(id) {
   } catch (err) { showToast(err.message || 'Misslyckades'); }
 }
 
+/** Gruppen som användarlistorna gäller — den öppnade gruppen eller den utfällda. */
+function saActiveGroupId() {
+  return saGroupView?.groupId || saUsersView?.groupId || null;
+}
+
 async function saRemoveMember(memberId) {
-  if (!saUsersView) return;
-  try { await SuperAdmin.removeMember(saCred, saUsersView.groupId, memberId); await saViewUsersReload(); }
+  const groupId = saActiveGroupId();
+  if (!groupId) return;
+  try { await SuperAdmin.removeMember(saCred, groupId, memberId); await saReloadUsers(groupId); }
   catch (err) { showToast(err.message || 'Misslyckades'); }
 }
 
 async function saRemovePlayer(playerId) {
-  if (!saUsersView) return;
-  try { await SuperAdmin.removePlayer(saCred, saUsersView.groupId, playerId); await saViewUsersReload(); }
+  const groupId = saActiveGroupId();
+  if (!groupId) return;
+  try { await SuperAdmin.removePlayer(saCred, groupId, playerId); await saReloadUsers(groupId); }
   catch (err) { showToast(err.message || 'Misslyckades'); }
 }
 
-async function saViewUsersReload() {
-  const id = saUsersView.groupId;
-  const res = await SuperAdmin.listUsers(saCred, id);
-  saUsersView = { groupId: id, members: res.members || [], players: res.players || [] };
+/** Läs om det som visar gruppens användare, och räknarna i grupplistan. */
+async function saReloadUsers(groupId) {
+  if (saUsersView?.groupId === groupId) {
+    const res = await SuperAdmin.listUsers(saCred, groupId);
+    saUsersView = { groupId, members: res.members || [], players: res.players || [] };
+  }
+  if (saPeople) saPeople = null;
+  if (saGroupView?.groupId === groupId) await saOpenGroup(groupId, true);
   await saLoadGroups();
+}
+
+// ─── Titta i en grupp ────────────────────────────────────────────────────────
+
+/** Öppna en grupp i läsläge. `silent` behåller nuvarande vy medan datan hämtas. */
+async function saOpenGroup(id, silent = false) {
+  const keep = saGroupView?.groupId === id ? saGroupView.detail : null;
+  saGroupView = { groupId: id, detail: keep };
+  saTab = 'groups';
+  if (!silent) renderAdmin();
+  try {
+    saGroupView = { groupId: id, detail: await SuperAdmin.groupDetail(saCred, id) };
+  } catch (err) {
+    showToast(err.message || 'Kunde inte hämta gruppen');
+    if (err.code === 'INVALID_ADMIN_LOGIN') saCred = null;
+    saGroupView = null;
+  }
+  renderAdmin();
+}
+
+function saCloseGroup() {
+  saGroupView = null;
+  renderAdmin();
+}
+
+// ─── Användare över gruppgränserna ───────────────────────────────────────────
+
+async function saLoadPeople() {
+  try {
+    const res = await SuperAdmin.listPeople(saCred);
+    saPeople = { people: res?.people || [], names: res?.names || [] };
+    renderAdmin();
+  } catch (err) {
+    showToast(err.message || 'Kunde inte hämta användare');
+    if (err.code === 'INVALID_ADMIN_LOGIN') { saCred = null; renderAdmin(); }
+  }
+}
+
+function saSearchPeople(value) {
+  saPeopleQuery = value;
+  renderAdmin();
+  const field = $('#sa-people-search');
+  if (field) {
+    field.focus();
+    field.setSelectionRange(field.value.length, field.value.length);
+  }
+}
+
+/** Slå upp en markerad identitet i den hämtade namnlistan. */
+function saFindIdentity(key) {
+  for (const n of saPeople?.names || []) {
+    for (const o of n.occurrences || []) {
+      if (identityKey(o) === key) return o;
+    }
+  }
+  return null;
+}
+
+function saTogglePick(key, checked) {
+  if (checked) {
+    const ident = saFindIdentity(key);
+    if (ident) saSelected.set(key, ident);
+  } else {
+    saSelected.delete(key);
+  }
+  renderAdmin();
+}
+
+function saClearSelection() {
+  saSelected.clear();
+  renderAdmin();
+}
+
+/** Slå ihop alla konton som bär samma namn. */
+function saMergeName(key) {
+  const entry = (saPeople?.names || []).find(n => n.key === key);
+  if (!entry || (entry.occurrences || []).length < 2) return;
+  saConfirmMerge(entry.occurrences, entry.name);
+}
+
+/** Slå ihop de konton som kryssats i — kan korsa både namn och grupper. */
+function saMergeSelected() {
+  const picks = [...saSelected.values()];
+  if (picks.length < 2) { showToast('Markera minst två konton'); return; }
+  saConfirmMerge(picks, picks[0].name);
+}
+
+function saConfirmMerge(identities, suggestedName) {
+  const groups = [...new Set(identities.map(i => i.groupName))];
+  showPrompt(
+    `Slå ihop ${identities.length} konton från ${groups.join(', ')} till en person. Vad ska personen heta?`,
+    { value: suggestedName || '' },
+    async (name) => {
+      const displayName = (name || '').trim() || suggestedName;
+      if (!displayName) { showToast('Personen måste ha ett namn'); return; }
+      try {
+        const res = await SuperAdmin.mergePeople(
+          saCred,
+          identities.map(i => ({ kind: i.kind, groupId: i.groupId, id: i.id })),
+          displayName
+        );
+        saSelected.clear();
+        showToast(`${res?.displayName || displayName}: ${res?.identities || identities.length} konton sammanslagna`);
+        await saLoadPeople();
+      } catch (err) { showToast(err.message || 'Kunde inte slå ihop'); }
+    });
+}
+
+function saRenamePerson(personId) {
+  const person = (saPeople?.people || []).find(p => p.id === personId);
+  showPrompt('Nytt namn på personen', { value: person?.displayName || '' }, async (name) => {
+    if (!name || !name.trim()) return;
+    try { await SuperAdmin.renamePerson(saCred, personId, name.trim()); await saLoadPeople(); }
+    catch (err) { showToast(err.message || 'Misslyckades'); }
+  });
+}
+
+function saSplitPerson(personId) {
+  const person = (saPeople?.people || []).find(p => p.id === personId);
+  showConfirm(
+    `Dela upp "${person?.displayName || ''}"? Kontona blir fristående igen — inga spel eller protokoll påverkas.`,
+    async () => {
+      try { await SuperAdmin.splitPerson(saCred, personId); await saLoadPeople(); }
+      catch (err) { showToast(err.message || 'Misslyckades'); }
+    });
+}
+
+async function saUnlinkIdentity(key) {
+  const [kind, groupId, id] = String(key).split(':');
+  try { await SuperAdmin.unlinkIdentity(saCred, kind, groupId, id); await saLoadPeople(); }
+  catch (err) { showToast(err.message || 'Misslyckades'); }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -3601,7 +4018,14 @@ function bindGroupEvents() {
     if (e.target.closest('#sa-logout')) return saLogout();
     if (e.target.closest('#sa-create')) return saCreateGroup();
     if (e.target.closest('#sa-feed-more')) return saFeedMore();
+    if (e.target.closest('#sa-group-back')) return saCloseGroup();
+    if (e.target.closest('#sa-group-reload')) {
+      return saGroupView ? saOpenGroup(saGroupView.groupId) : undefined;
+    }
+    if (e.target.closest('#sa-merge-selected')) return saMergeSelected();
+    if (e.target.closest('#sa-select-clear')) return saClearSelection();
     const tab = e.target.closest('[data-sa-tab]'); if (tab) return saShowTab(tab.dataset.saTab);
+    const open = e.target.closest('[data-sa-open]'); if (open) return saOpenGroup(open.dataset.saOpen);
     const rename = e.target.closest('[data-sa-rename]'); if (rename) return saRename(rename.dataset.saRename);
     const slug = e.target.closest('[data-sa-slug]'); if (slug) return saSetSlug(slug.dataset.saSlug);
     const regen = e.target.closest('[data-sa-regen]'); if (regen) return saRegen(regen.dataset.saRegen);
@@ -3609,12 +4033,21 @@ function bindGroupEvents() {
     const del = e.target.closest('[data-sa-delete]'); if (del) return saDelete(del.dataset.saDelete);
     const rmUser = e.target.closest('[data-sa-rmuser]'); if (rmUser) return saRemoveMember(rmUser.dataset.saRmuser);
     const rmPlayer = e.target.closest('[data-sa-rmplayer]'); if (rmPlayer) return saRemovePlayer(rmPlayer.dataset.saRmplayer);
+    const mergeName = e.target.closest('[data-sa-merge-name]'); if (mergeName) return saMergeName(mergeName.dataset.saMergeName);
+    const unlink = e.target.closest('[data-sa-unlink]'); if (unlink) return saUnlinkIdentity(unlink.dataset.saUnlink);
+    const pRename = e.target.closest('[data-sa-person-rename]'); if (pRename) return saRenamePerson(pRename.dataset.saPersonRename);
+    const pSplit = e.target.closest('[data-sa-person-split]'); if (pSplit) return saSplitPerson(pSplit.dataset.saPersonSplit);
   });
   $('#admin-content').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.target.id === 'sa-user' || e.target.id === 'sa-pass')) saLogin();
   });
   $('#admin-content').addEventListener('change', (e) => {
-    if (e.target.id === 'sa-feed-filter') saFilterFeed(e.target.value);
+    if (e.target.id === 'sa-feed-filter') return saFilterFeed(e.target.value);
+    const pick = e.target.closest('[data-sa-pick]');
+    if (pick) return saTogglePick(pick.dataset.saPick, pick.checked);
+  });
+  $('#admin-content').addEventListener('input', (e) => {
+    if (e.target.id === 'sa-people-search') saSearchPeople(e.target.value);
   });
 }
 
