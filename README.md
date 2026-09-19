@@ -253,16 +253,19 @@ you paste as a single *prepared statement*, and PostgreSQL allows only one comma
 prepared statement. Such a console rejects the whole schema with `cannot insert multiple
 commands into a prepared statement`. Either run the schema somewhere that takes a script
 (the Supabase SQL Editor, or `psql "$POSTGRES_URL_NON_POOLING" -f supabase/schema.sql`),
-or build a one-command version of it:
+or paste [`supabase/schema-single-statement.sql`](supabase/schema-single-statement.sql)
+instead. That file wraps the schema's statements in a single `do $$ … $$` block, which
+counts as one command and pastes into any console. The content is identical, and the
+block runs in one transaction, so a failure rolls the whole upgrade back.
+
+It is generated from `schema.sql`, so rebuild it whenever the schema changes:
 
 ```bash
-node supabase/build-single-statement.mjs   # → supabase/schema-single-statement.sql
+node supabase/build-single-statement.mjs
 ```
 
-That wraps the schema's statements in a single `do $$ … $$` block, which counts as one
-command and pastes into any console. The content is identical, and the block runs in one
-transaction, so a failure rolls the whole upgrade back. The output is generated (and
-git-ignored) — rebuild it whenever `schema.sql` changes.
+`npm test` fails if the committed file has drifted from `schema.sql`, and says which
+command puts it right.
 
 ### One-time setup
 

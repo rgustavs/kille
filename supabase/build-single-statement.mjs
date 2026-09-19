@@ -22,7 +22,7 @@
  */
 import { readFile, writeFile } from 'fs/promises';
 import { dirname, join, resolve } from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const INPUT = join(HERE, 'schema.sql');
@@ -139,6 +139,10 @@ ${outer};
 `;
 }
 
-const statements = splitStatements(await readFile(INPUT, 'utf8'));
-await writeFile(OUTPUT, buildSingleStatement(statements), 'utf8');
-console.log(`${statements.length} satser → ${OUTPUT}`);
+// Skriv bara filen när skriptet körs direkt — testerna importerar
+// splitStatements/buildSingleStatement och ska inte röra något på disk.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const statements = splitStatements(await readFile(INPUT, 'utf8'));
+  await writeFile(OUTPUT, buildSingleStatement(statements), 'utf8');
+  console.log(`${statements.length} satser → ${OUTPUT}`);
+}
