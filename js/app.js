@@ -665,6 +665,7 @@ function renderGroupsTab() {
       </div>
       <div class="admin-group-item__actions">
         <button class="member-item__action member-item__action--primary" data-sa-open="${escHtml(g.id)}">Titta i gruppen</button>
+        <button class="member-item__action" data-sa-visit="${escHtml(g.id)}">Besök grupp</button>
         <button class="member-item__action" data-sa-rename="${escHtml(g.id)}">Byt namn</button>
         <button class="member-item__action" data-sa-slug="${escHtml(g.id)}">Byt slug</button>
         <button class="member-item__action" data-sa-regen="${escHtml(g.id)}">Ny kod</button>
@@ -824,6 +825,7 @@ function renderGroupDetail() {
         Senast aktiv ${formatRelativeTime(g.lastActivityAt)}
       </div>
       <div class="admin-group-item__actions">
+        <button class="member-item__action" data-sa-visit="${escHtml(g.id)}">Besök grupp</button>
         <button class="member-item__action" data-sa-rename="${escHtml(g.id)}">Byt namn</button>
         <button class="member-item__action" data-sa-slug="${escHtml(g.id)}">Byt slug</button>
         <button class="member-item__action" data-sa-regen="${escHtml(g.id)}">Ny kod</button>
@@ -1215,6 +1217,32 @@ function saDelete(id) {
     }
     catch (err) { showToast(err.message || 'Misslyckades'); }
   });
+}
+
+/** Join-kod för en grupp — från grupplistan eller den öppnade gruppvyn. */
+function saJoinCodeFor(id) {
+  const listed = saGroups.find(x => x.id === id);
+  if (listed?.joinCode) return { joinCode: listed.joinCode, name: listed.name };
+  if (saGroupView?.groupId === id && saGroupView.detail?.group) {
+    const g = saGroupView.detail.group;
+    return { joinCode: g.joinCode, name: g.name };
+  }
+  return null;
+}
+
+/**
+ * Besök gruppen som en vanlig användare — lämnar super-admin-konsolen och går
+ * in i gruppen precis som om man loggat in med gruppkoden, men utan att
+ * registrera något medlemsnamn (så inget nytt medlemskap eller login skapas).
+ */
+async function saVisitGroup(id) {
+  const info = saJoinCodeFor(id);
+  if (!info?.joinCode) { showToast('Hittar ingen gruppkod'); return; }
+  try {
+    const snapshot = await Groups.join(info.joinCode, null);
+    enterGroupFromSnapshot(snapshot, null, false);
+    showToast(`Besöker ${snapshot.group?.name || info.name} som användare`);
+  } catch (err) { showToast(err.message || 'Kunde inte besöka gruppen'); }
 }
 
 async function saViewUsers(id) {
@@ -4040,6 +4068,7 @@ function bindGroupEvents() {
     if (e.target.closest('#sa-people-retry')) return saLoadPeople();
     const tab = e.target.closest('[data-sa-tab]'); if (tab) return saShowTab(tab.dataset.saTab);
     const open = e.target.closest('[data-sa-open]'); if (open) return saOpenGroup(open.dataset.saOpen);
+    const visit = e.target.closest('[data-sa-visit]'); if (visit) return saVisitGroup(visit.dataset.saVisit);
     const rename = e.target.closest('[data-sa-rename]'); if (rename) return saRename(rename.dataset.saRename);
     const slug = e.target.closest('[data-sa-slug]'); if (slug) return saSetSlug(slug.dataset.saSlug);
     const regen = e.target.closest('[data-sa-regen]'); if (regen) return saRegen(regen.dataset.saRegen);
