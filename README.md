@@ -244,6 +244,10 @@ Only the super-admin can read the activity log (via `kille_sa_usage_overview` an
 existing database, just re-run [`supabase/schema.sql`](supabase/schema.sql): it is
 idempotent and adds the new tables, columns and functions in place.
 
+> **If the app says "Databasen är inte uppdaterad":** the client is newer than the
+> database — an RPC it calls does not exist yet. Re-run
+> [`supabase/schema.sql`](supabase/schema.sql) in the Supabase SQL Editor and try again.
+
 ### One-time setup
 
 1. Create a Supabase project (or use an existing one).
