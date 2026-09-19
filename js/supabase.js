@@ -20,7 +20,8 @@ const FRIENDLY_ERRORS = {
   GROUP_NOT_FOUND: 'Gruppen finns inte längre.',
   MERGE_NEEDS_TWO: 'Markera minst två användare att slå ihop.',
   PERSON_NAME_REQUIRED: 'Personen måste ha ett namn.',
-  INVALID_IDENTITY_KIND: 'Okänd användartyp.'
+  INVALID_IDENTITY_KIND: 'Okänd användartyp.',
+  FUNCTION_MISSING: 'Databasen är inte uppdaterad — kör om supabase/schema.sql i Supabase SQL Editor.'
 };
 
 export class RpcError extends Error {
@@ -61,7 +62,17 @@ export async function rpc(fn, params = {}) {
   }
 
   if (!res.ok) {
-    const raw = body && typeof body === 'object' ? (body.message || body.hint || body.details) : String(body || '');
+    const obj = body && typeof body === 'object' ? body : null;
+    const raw = obj ? (obj.message || obj.hint || obj.details) : String(body || '');
+
+    // PostgREST hittar inte funktionen (PGRST202). Det betyder nästan alltid att
+    // databasen inte har fått senaste schemat — appen är nyare än databasen.
+    // Utan det här beskedet visas bara PostgREST:s engelska text, som inte
+    // säger vad man ska göra åt saken.
+    if (obj?.code === 'PGRST202' || /Could not find the function/i.test(String(raw || ''))) {
+      throw new RpcError('FUNCTION_MISSING', FRIENDLY_ERRORS.FUNCTION_MISSING);
+    }
+
     // PostgREST lägger vårt raise-meddelande i `message`.
     const code = typeof raw === 'string'
       ? Object.keys(FRIENDLY_ERRORS).find(c => raw.includes(c)) || null

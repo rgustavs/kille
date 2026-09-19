@@ -19,6 +19,17 @@ globalThis.fetch = async (url, opts) => {
   if (fetchMode === 'rpcError') {
     return { ok: false, status: 400, text: async () => JSON.stringify({ message: 'INVALID_GROUP_OR_CODE' }) };
   }
+  if (fetchMode === 'missingFn') {
+    return {
+      ok: false, status: 404,
+      text: async () => JSON.stringify({
+        code: 'PGRST202',
+        details: 'Searched for the function public.kille_sa_group_detail ... no matches were found in the schema cache.',
+        hint: null,
+        message: 'Could not find the function public.kille_sa_group_detail(p_group_id, p_password, p_username) in the schema cache'
+      })
+    };
+  }
   return { ok: true, status: 200, text: async () => 'null' };
 };
 
@@ -255,6 +266,21 @@ async function runTests() {
     assert.strictEqual(rename.body.p_name, 'Robert G');
     console.log('✅ super-admin group/people RPC mapping passes');
   } catch (err) { failures++; console.error('❌ super-admin group/people RPC mapping failed', err); }
+
+  // Test: saknas funktionen i databasen (appen nyare än schemat) ska felet
+  // säga vad man gör åt det, inte visa PostgREST:s engelska text.
+  try {
+    fetchMode = 'missingFn';
+    let caught = null;
+    try { await rpc('kille_sa_group_detail', { p_group_id: 'G1' }); }
+    catch (e) { caught = e; }
+    assert.ok(caught instanceof RpcError);
+    assert.strictEqual(caught.code, 'FUNCTION_MISSING');
+    assert.ok(/schema\.sql/.test(caught.message), 'felet ska peka ut schema.sql');
+    assert.ok(!/schema cache/i.test(caught.message), 'PostgREST-texten ska inte läcka ut');
+    fetchMode = 'ok';
+    console.log('✅ missing-function error mapping passes');
+  } catch (err) { failures++; fetchMode = 'ok'; console.error('❌ missing-function error mapping failed', err); }
 
   if (failures > 0) {
     console.error(`${failures} test group(s) failed.`);

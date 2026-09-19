@@ -586,6 +586,7 @@ let saFeedFilter = { eventType: null }; // active feed filter
 let saGroupView = null;   // { groupId, detail } when looking inside a group
 let saPeople = null;      // { people, names } — users across every group
 let saPeopleQuery = '';   // free-text filter in the users tab
+let saPeopleError = null; // why the users tab could not load, if it failed
 const saSelected = new Map(); // identity key → identity picked for merging
 
 async function openAdmin() {
@@ -876,6 +877,13 @@ function renderIdentityRow(o) {
 }
 
 function renderPeopleTab() {
+  if (saPeopleError) {
+    return `
+      <div class="panel">
+        <div class="empty-state"><div class="empty-state__text">${escHtml(saPeopleError)}</div></div>
+        <button class="btn btn--ghost btn--full" id="sa-people-retry">Försök igen</button>
+      </div>`;
+  }
   if (!saPeople) {
     return '<div class="panel"><div class="empty-state"><div class="empty-state__text">Laddar användare…</div></div></div>';
   }
@@ -1146,6 +1154,7 @@ function saLogout() {
   saFeedFilter = { eventType: null };
   saPeople = null;
   saPeopleQuery = '';
+  saPeopleError = null;
   saSelected.clear();
   renderAdmin();
 }
@@ -1273,14 +1282,18 @@ function saCloseGroup() {
 // ─── Användare över gruppgränserna ───────────────────────────────────────────
 
 async function saLoadPeople() {
+  saPeopleError = null;
   try {
     const res = await SuperAdmin.listPeople(saCred);
     saPeople = { people: res?.people || [], names: res?.names || [] };
-    renderAdmin();
   } catch (err) {
-    showToast(err.message || 'Kunde inte hämta användare');
-    if (err.code === 'INVALID_ADMIN_LOGIN') { saCred = null; renderAdmin(); }
+    // Utan ett synligt feltillstånd skulle fliken stå kvar på "Laddar användare…"
+    // i all evighet efter att toasten hunnit försvinna.
+    saPeopleError = err.message || 'Kunde inte hämta användare';
+    showToast(saPeopleError);
+    if (err.code === 'INVALID_ADMIN_LOGIN') saCred = null;
   }
+  renderAdmin();
 }
 
 function saSearchPeople(value) {
@@ -4024,6 +4037,7 @@ function bindGroupEvents() {
     }
     if (e.target.closest('#sa-merge-selected')) return saMergeSelected();
     if (e.target.closest('#sa-select-clear')) return saClearSelection();
+    if (e.target.closest('#sa-people-retry')) return saLoadPeople();
     const tab = e.target.closest('[data-sa-tab]'); if (tab) return saShowTab(tab.dataset.saTab);
     const open = e.target.closest('[data-sa-open]'); if (open) return saOpenGroup(open.dataset.saOpen);
     const rename = e.target.closest('[data-sa-rename]'); if (rename) return saRename(rename.dataset.saRename);
