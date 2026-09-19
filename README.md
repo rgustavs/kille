@@ -248,6 +248,22 @@ idempotent and adds the new tables, columns and functions in place.
 > database — an RPC it calls does not exist yet. Re-run
 > [`supabase/schema.sql`](supabase/schema.sql) in the Supabase SQL Editor and try again.
 
+Some SQL consoles — Vercel's query view for a Supabase resource, for one — send what
+you paste as a single *prepared statement*, and PostgreSQL allows only one command per
+prepared statement. Such a console rejects the whole schema with `cannot insert multiple
+commands into a prepared statement`. Either run the schema somewhere that takes a script
+(the Supabase SQL Editor, or `psql "$POSTGRES_URL_NON_POOLING" -f supabase/schema.sql`),
+or build a one-command version of it:
+
+```bash
+node supabase/build-single-statement.mjs   # → supabase/schema-single-statement.sql
+```
+
+That wraps the schema's statements in a single `do $$ … $$` block, which counts as one
+command and pastes into any console. The content is identical, and the block runs in one
+transaction, so a failure rolls the whole upgrade back. The output is generated (and
+git-ignored) — rebuild it whenever `schema.sql` changes.
+
 ### One-time setup
 
 1. Create a Supabase project (or use an existing one).

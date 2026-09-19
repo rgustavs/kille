@@ -46,3 +46,6 @@ build/
 .tmp/
 coverage/
 venv/
+
+# Genererad av supabase/build-single-statement.mjs
+supabase/schema-single-statement.sql
